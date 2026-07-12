@@ -308,7 +308,7 @@ export default function AuditCycles() {
               onChange={(e) => setAuditForm({ ...auditForm, auditor: e.target.value })}
             >
               {employees.map(u => (
-                <MenuItem key={u._id} value={u._id}>{u.employee?.name || u.email} ({u.role})</MenuItem>
+                <MenuItem key={u.user._id} value={u.user._id}>{u.employee?.name || u.user.email} ({u.user.role})</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -318,7 +318,7 @@ export default function AuditCycles() {
               label="Start Date"
               type="date"
               fullWidth
-              InputLabelProps={{ shrink: true }}
+              slotProps={{ inputLabel: { shrink: true } }}
               value={auditForm.startDate}
               onChange={(e) => setAuditForm({ ...auditForm, startDate: e.target.value })}
             />
@@ -326,7 +326,7 @@ export default function AuditCycles() {
               label="End Date"
               type="date"
               fullWidth
-              InputLabelProps={{ shrink: true }}
+              slotProps={{ inputLabel: { shrink: true } }}
               value={auditForm.endDate}
               onChange={(e) => setAuditForm({ ...auditForm, endDate: e.target.value })}
             />
