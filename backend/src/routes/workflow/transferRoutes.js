@@ -3,6 +3,7 @@ import {
   createTransfer,
   approveTransfer,
   rejectTransfer,
+  cancelTransfer,
   listTransfers
 } from '../../controllers/workflow/transferController.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
@@ -18,6 +19,9 @@ router.get('/', listTransfers);
 
 // Create transfer request
 router.post('/', createTransfer);
+
+// Cancel transfer request
+router.patch('/:id/cancel', cancelTransfer);
 
 // Approve / Reject (Admin & Asset Manager only)
 router.patch('/:id/approve', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), approveTransfer);

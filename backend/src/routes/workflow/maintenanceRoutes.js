@@ -3,6 +3,8 @@ import {
   createMaintenanceRequest,
   approveMaintenance,
   rejectMaintenance,
+  assignTechnician,
+  updateProgress,
   resolveMaintenance,
   listMaintenanceRequests
 } from '../../controllers/workflow/maintenanceController.js';
@@ -24,7 +26,13 @@ router.post('/', createMaintenanceRequest);
 router.patch('/:id/approve', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), approveMaintenance);
 router.patch('/:id/reject', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), rejectMaintenance);
 
-// Resolve maintenance
+// Assign technician (Admin & Asset Manager only)
+router.patch('/:id/assign', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), assignTechnician);
+
+// Update progress (All Auth users - authorized checks are inside the controller)
+router.patch('/:id/progress', updateProgress);
+
+// Resolve maintenance (Admin & Asset Manager only)
 router.patch('/:id/resolve', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), resolveMaintenance);
 
 export default router;

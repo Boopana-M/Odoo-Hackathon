@@ -19,6 +19,11 @@ import assetRoutes from './routes/assets/assetRoutes.js';
 import allocationRoutes from './routes/workflow/allocationRoutes.js';
 import transferRoutes from './routes/workflow/transferRoutes.js';
 import maintenanceRoutes from './routes/workflow/maintenanceRoutes.js';
+import bookingRoutes from './routes/workflow/bookingRoutes.js';
+import auditRoutes from './routes/workflow/auditRoutes.js';
+import notificationRoutes from './routes/workflow/notificationRoutes.js';
+import activityRoutes from './routes/workflow/activityRoutes.js';
+import reportRoutes from './routes/report/reportRoutes.js';
 
 // Resolve directory paths
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +49,11 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/allocations', allocationRoutes);
 app.use('/api/transfers', transferRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/audits', auditRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/activity-logs', activityRoutes);
+app.use('/api/reports', reportRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

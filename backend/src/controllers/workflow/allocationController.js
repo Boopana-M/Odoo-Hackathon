@@ -1,5 +1,7 @@
 import { Asset, Allocation, ALLOCATION_STATUS, ASSET_LIFECYCLE, ROLES } from '../../models/index.js';
 import mongoose from 'mongoose';
+import { logActivity } from '../../utils/logger.js';
+import { createNotification } from '../../utils/notifier.js';
 
 let isReplicaSet = null;
 const checkReplicaSet = async () => {
@@ -115,6 +117,35 @@ export const allocateAsset = async (req, res) => {
       session.endSession();
     }
 
+    // Log activity
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'asset.allocated',
+      entityType: 'Allocation',
+      entityId: allocation._id,
+      metadata: { assetId, employeeId, departmentId }
+    });
+
+    // Notify employee
+    if (employeeId) {
+      try {
+        const EmployeeModel = mongoose.model('Employee');
+        const empProfile = await EmployeeModel.findById(employeeId);
+        if (empProfile && empProfile.userId) {
+          await createNotification({
+            recipientUserId: empProfile.userId,
+            type: 'Asset Assigned',
+            title: 'Asset Allocated',
+            message: `The asset has been allocated to you.`,
+            relatedEntityType: 'Allocation',
+            relatedEntityId: allocation._id
+          });
+        }
+      } catch (err) {
+        console.error('Failed to notify employee of allocation:', err);
+      }
+    }
+
     return res.status(201).json({ message: 'Asset allocated successfully.', allocation });
   } catch (error) {
     if (useTx && session) {
@@ -213,6 +244,35 @@ export const returnAsset = async (req, res) => {
     if (useTx && session) {
       await session.commitTransaction();
       session.endSession();
+    }
+
+    // Log activity
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'asset.returned',
+      entityType: 'Allocation',
+      entityId: allocation._id,
+      metadata: { assetId: allocation.assetId }
+    });
+
+    // Send return notification
+    if (allocation.employeeId) {
+      try {
+        const EmployeeModel = mongoose.model('Employee');
+        const empProfile = await EmployeeModel.findById(allocation.employeeId);
+        if (empProfile && empProfile.userId) {
+          await createNotification({
+            recipientUserId: empProfile.userId,
+            type: 'Asset Returned',
+            title: 'Asset Returned',
+            message: `Your allocated asset has been successfully returned.`,
+            relatedEntityType: 'Allocation',
+            relatedEntityId: allocation._id
+          });
+        }
+      } catch (err) {
+        console.error('Failed to notify employee of return:', err);
+      }
     }
 
     return res.status(200).json({ message: 'Asset returned successfully.', allocation });

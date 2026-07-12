@@ -215,6 +215,75 @@ describe('Phase 9 — Asset Maintenance Workflow', () => {
     });
   });
 
+  describe('PATCH /api/maintenance/:id/assign', () => {
+    let reqId;
+    beforeEach(async () => {
+      const req = await MaintenanceRequest.create({
+        assetId,
+        raisedBy: empId,
+        issueDescription: 'Broken screen',
+        status: MAINTENANCE_STATUS.APPROVED
+      });
+      reqId = req._id;
+    });
+
+    test('should allow Asset Manager to assign a technician', async () => {
+      const technicianUser = await User.findOne({ email: 'emp@test.com' });
+      const res = await fetch(`${baseUrl}/maintenance/${reqId}/assign`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${managerToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTechnician: technicianUser._id })
+      });
+      const body = await res.json();
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(body.maintenance.status, MAINTENANCE_STATUS.TECHNICIAN_ASSIGNED);
+      assert.strictEqual(body.maintenance.assignedTechnician.toString(), technicianUser._id.toString());
+    });
+  });
+
+  describe('PATCH /api/maintenance/:id/progress', () => {
+    let reqId;
+    let techToken;
+    beforeEach(async () => {
+      const technicianUser = await User.findOne({ email: 'emp@test.com' });
+      techToken = empToken;
+
+      const req = await MaintenanceRequest.create({
+        assetId,
+        raisedBy: empId,
+        issueDescription: 'Broken screen',
+        status: MAINTENANCE_STATUS.TECHNICIAN_ASSIGNED,
+        assignedTechnician: technicianUser._id
+      });
+      reqId = req._id;
+    });
+
+    test('should allow the assigned technician to update progress', async () => {
+      const res = await fetch(`${baseUrl}/maintenance/${reqId}/progress`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${techToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workNotes: 'Diagnosed panel issue' })
+      });
+      const body = await res.json();
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(body.maintenance.status, MAINTENANCE_STATUS.IN_PROGRESS);
+      assert.strictEqual(body.maintenance.workNotes, 'Diagnosed panel issue');
+    });
+
+    test('should block unauthorized users from updating progress', async () => {
+      const userRes = await signupUser(baseUrl, { email: 'emp_other@test.com', password: 'password123', name: 'Other User' });
+      const loginRes = await loginUser(baseUrl, { email: 'emp_other@test.com', password: 'password123' });
+      const otherToken = loginRes.token;
+
+      const res = await fetch(`${baseUrl}/maintenance/${reqId}/progress`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${otherToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workNotes: 'Spying on progress' })
+      });
+      assert.strictEqual(res.status, 403);
+    });
+  });
+
   describe('GET /api/maintenance', () => {
     beforeEach(async () => {
       await fetch(`${baseUrl}/maintenance`, {
