@@ -2,6 +2,7 @@ import express from 'express';
 import {
   allocateAsset,
   returnAsset,
+  requestReturn,
   listAllocations
 } from '../../controllers/workflow/allocationController.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
@@ -18,5 +19,8 @@ router.get('/', listAllocations);
 // Asset Manager only
 router.post('/', requireRole(ROLES.ASSET_MANAGER), allocateAsset);
 router.patch('/:id/return', requireRole(ROLES.ASSET_MANAGER), returnAsset);
+
+// Employee requests return
+router.patch('/:id/request-return', requestReturn);
 
 export default router;

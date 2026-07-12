@@ -17,6 +17,11 @@ const allocationService = {
     return response.data;
   },
 
+  async requestReturn(id, data) {
+    const response = await api.patch(`/allocations/${id}/request-return`, data);
+    return response.data;
+  },
+
   // Transfers
   async listTransfers() {
     const response = await api.get('/transfers');

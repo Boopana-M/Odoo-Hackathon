@@ -200,7 +200,7 @@ export const returnAsset = async (req, res) => {
       return res.status(404).json({ error: { message: 'Allocation record not found.' } });
     }
 
-    if (allocation.status !== ALLOCATION_STATUS.ACTIVE) {
+    if (allocation.status !== ALLOCATION_STATUS.ACTIVE && allocation.status !== ALLOCATION_STATUS.PENDING_RETURN) {
       if (useTx && session) {
         await session.abortTransaction();
         session.endSession();
@@ -350,6 +350,50 @@ export const listAllocations = async (req, res) => {
 
     return res.status(200).json({ allocations, total: allocations.length });
   } catch (error) {
-    return res.status(500).json({ error: { message: 'Failed to list allocations.' } });
+    return res.status(500).json({ error: { message: 'Failed to retrieve allocations.' } });
+  }
+};
+
+// ── Request Return ───────────────────────────────────────────────────────────
+/**
+ * PATCH /api/allocations/:id/request-return
+ * Employee
+ */
+export const requestReturn = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { returnNotes } = req.body;
+
+    const allocation = await Allocation.findById(id).populate('employeeId');
+    if (!allocation) {
+      return res.status(404).json({ error: { message: 'Allocation record not found.' } });
+    }
+
+    if (allocation.status !== ALLOCATION_STATUS.ACTIVE) {
+      return res.status(400).json({ error: { message: `Cannot request return. Allocation is ${allocation.status}.` } });
+    }
+
+    // Optional: verify the requester owns it
+    // if (allocation.employeeId && allocation.employeeId.userId.toString() !== req.user._id.toString()) ...
+
+    allocation.status = ALLOCATION_STATUS.PENDING_RETURN;
+    if (returnNotes) {
+      allocation.returnNotes = String(returnNotes).trim();
+    }
+    await allocation.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'asset.return_requested',
+      entityType: 'Allocation',
+      entityId: allocation._id
+    });
+
+    return res.status(200).json({ message: 'Return requested.', allocation });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to request return.' } });
   }
 };

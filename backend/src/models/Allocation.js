@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 export const ALLOCATION_STATUS = {
   ACTIVE: 'Active',
+  PENDING_RETURN: 'Pending Return',
   RETURNED: 'Returned',
   TRANSFERRED: 'Transferred' // terminal: superseded by a Transfer
 };

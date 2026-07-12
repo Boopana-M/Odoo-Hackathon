@@ -24,13 +24,11 @@ export default function MaintenanceKanban() {
 
   // Modals state
   const [actionModal, setActionModal] = useState({ open: false, type: '', request: null });
-  const [raiseOpen, setRaiseOpen] = useState(false);
-  
-  // Form fields
   const [notes, setNotes] = useState('');
   const [selectedTech, setSelectedTech] = useState('');
   
-  const [raiseData, setRaiseData] = useState({ assetId: '', issueDescription: '', priority: 'Medium' });
+  const [raiseOpen, setRaiseOpen] = useState(false);
+  const [raiseData, setRaiseData] = useState({ assetId: '', issueDescription: '', priority: 'Medium', imageUrl: '' });
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [menuReq, setMenuReq] = useState(null);
@@ -69,7 +67,8 @@ export default function MaintenanceKanban() {
             status: colName,
             priority: req.priority,
             currentStep: step,
-            tech: req.assignedTechnician ? { name: techName, initials } : null
+            tech: req.assignedTechnician ? { name: techName, initials } : null,
+            imageUrl: req.attachmentMetadata?.url || null
           };
         });
         setRequests(mapped);
@@ -135,7 +134,7 @@ export default function MaintenanceKanban() {
     try {
       await maintenanceService.create(raiseData);
       setRaiseOpen(false);
-      setRaiseData({ assetId: '', issueDescription: '', priority: 'Medium' });
+      setRaiseData({ assetId: '', issueDescription: '', priority: 'Medium', imageUrl: '' });
       fetchRequests();
     } catch (err) {
       alert(err.response?.data?.error?.message || 'Failed to raise request');
@@ -172,6 +171,14 @@ export default function MaintenanceKanban() {
                     <PriorityChip priority={card.priority} />
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{card.title}</Typography>
+                  {card.imageUrl && (
+                    <Box 
+                      component="img" 
+                      src={card.imageUrl} 
+                      alt="Maintenance Issue" 
+                      sx={{ width: '100%', height: 'auto', maxHeight: 120, objectFit: 'cover', borderRadius: '8px', mb: 2 }} 
+                    />
+                  )}
                   
                   <Divider sx={{ my: 1 }} />
                   
@@ -288,6 +295,12 @@ export default function MaintenanceKanban() {
             rows={3}
             value={raiseData.issueDescription}
             onChange={(e) => setRaiseData({ ...raiseData, issueDescription: e.target.value })}
+          />
+          <TextField
+            label="Image URL (Optional)"
+            fullWidth
+            value={raiseData.imageUrl}
+            onChange={(e) => setRaiseData({ ...raiseData, imageUrl: e.target.value })}
           />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

@@ -61,10 +61,12 @@ export default function OrganizationSetup() {
   const [deptOpen, setDeptOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
+  const [deptChangeOpen, setDeptChangeOpen] = useState(false);
 
   // Selected item / form state
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedRole, setSelectedRole] = useState('');
+  const [selectedDept, setSelectedDept] = useState('');
   const [deptForm, setDeptForm] = useState({ id: null, name: '', manager: '', parent: '', status: 'Active' });
   const [catForm, setCatForm] = useState({ id: null, name: '', description: '', warranty: '', status: 'Active' });
 
@@ -120,6 +122,7 @@ export default function OrganizationSetup() {
       setDeptForm({ id: null, name: '', manager: '', parent: '', status: 'Active' });
       loadData();
     } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to save department');
       console.error('Failed to save department', err);
     }
   };
@@ -147,6 +150,7 @@ export default function OrganizationSetup() {
       setCatForm({ id: null, name: '', description: '', warranty: '', status: 'Active' });
       loadData();
     } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to save category');
       console.error('Failed to save category', err);
     }
   };
@@ -162,6 +166,19 @@ export default function OrganizationSetup() {
       }
     }
     setRoleOpen(false);
+    setSelectedEmployee(null);
+  };
+
+  const handleChangeDept = async () => {
+    if (selectedEmployee) {
+      try {
+        await employeeService.updateDepartment(selectedEmployee.id, selectedDept);
+        loadData();
+      } catch (err) {
+        alert(err.response?.data?.error?.message || 'Failed to change department');
+      }
+    }
+    setDeptChangeOpen(false);
     setSelectedEmployee(null);
   };
 
@@ -217,6 +234,7 @@ export default function OrganizationSetup() {
       }
       loadData();
     } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to toggle status');
       console.error('Failed to toggle status', err);
     }
     handleMenuClose();
@@ -503,6 +521,18 @@ export default function OrganizationSetup() {
                             >
                               Access
                             </Button>
+                            <Button 
+                              size="small" 
+                              variant="outlined" 
+                              onClick={() => {
+                                setSelectedEmployee({ id: usr._id, name: empName, email: usr.email });
+                                setSelectedDept(item.employee?.departmentId?._id || '');
+                                setDeptChangeOpen(true);
+                              }}
+                              sx={{ fontSize: '0.75rem', py: 0.25, ml: 1 }}
+                            >
+                              Move
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -625,6 +655,38 @@ export default function OrganizationSetup() {
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button onClick={() => setRoleOpen(false)}>Cancel</Button>
           <Button onClick={handlePromoteRole} variant="contained">Update Privileges</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG 4: CHANGE DEPARTMENT */}
+      <Dialog open={deptChangeOpen} onClose={() => setDeptChangeOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Change Department</DialogTitle>
+        <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {selectedEmployee && (
+            <Box sx={{ p: 2, bgcolor: '#f4f6f8', borderRadius: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">Employee</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{selectedEmployee.name}</Typography>
+              <Typography variant="caption" color="text.secondary">{selectedEmployee.email}</Typography>
+            </Box>
+          )}
+          
+          <FormControl fullWidth>
+            <InputLabel>Department</InputLabel>
+            <Select
+              value={selectedDept}
+              label="Department"
+              onChange={(e) => setSelectedDept(e.target.value)}
+            >
+              <MenuItem value="">Unassigned</MenuItem>
+              {departments.filter(d => d.isActive).map((d) => (
+                <MenuItem key={d._id} value={d._id}>{d.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={() => setDeptChangeOpen(false)}>Cancel</Button>
+          <Button onClick={handleChangeDept} variant="contained" disabled={!selectedDept}>Confirm Change</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -25,6 +25,31 @@ export const createAuditCycle = async (req, res) => {
 
     await cycle.save();
 
+    // Populate AuditItems based on scope
+    const filter = { lifecycleStatus: { $in: [ASSET_LIFECYCLE.AVAILABLE, ASSET_LIFECYCLE.ALLOCATED] } };
+    if (scopeType === AUDIT_SCOPE_TYPE.DEPARTMENT && scopeDepartmentId) {
+      // Find active allocations to this department
+      const allocations = await Allocation.find({ 
+        status: ALLOCATION_STATUS.ACTIVE, 
+        departmentId: scopeDepartmentId 
+      });
+      const assetIds = allocations.map(a => a.assetId);
+      filter._id = { $in: assetIds };
+    } else if (scopeType === AUDIT_SCOPE_TYPE.LOCATION && scopeLocation) {
+      filter.location = scopeLocation;
+    }
+
+    const assetsToAudit = await Asset.find(filter);
+    
+    if (assetsToAudit.length > 0) {
+      const auditItems = assetsToAudit.map(asset => ({
+        auditCycleId: cycle._id,
+        assetId: asset._id,
+        verificationResult: VERIFICATION_RESULT.PENDING
+      }));
+      await AuditItem.insertMany(auditItems);
+    }
+
     await logActivity({
       actorUserId: req.user._id,
       action: 'audit.created',

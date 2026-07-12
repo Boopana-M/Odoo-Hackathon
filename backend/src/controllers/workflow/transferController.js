@@ -97,8 +97,25 @@ export const approveTransfer = async (req, res) => {
     const { id } = req.params;
     const { decisionNotes } = req.body;
 
+    const transfer = await TransferRequest.findOne({ _id: id, status: TRANSFER_STATUS.REQUESTED });
+    if (!transfer) {
+      return res.status(400).json({ error: { message: 'Transfer request not found or not in Requested status.' } });
+    }
+
+    if (req.user.role === ROLES.DEPARTMENT_HEAD) {
+      const EmployeeModel = mongoose.model('Employee');
+      const deptHeadEmp = await EmployeeModel.findOne({ userId: req.user._id });
+      if (!deptHeadEmp || !deptHeadEmp.departmentId) {
+         return res.status(403).json({ error: { message: 'Department Head profile or department ID missing.' } });
+      }
+      const allocation = await Allocation.findById(transfer.currentAllocationId);
+      if (!allocation || !allocation.departmentId || allocation.departmentId.toString() !== deptHeadEmp.departmentId.toString()) {
+         return res.status(403).json({ error: { message: 'Department Heads can only approve transfers for assets currently assigned to their department.' } });
+      }
+    }
+
     // Atomically guard against double approval
-    const transfer = await TransferRequest.findOneAndUpdate(
+    const updatedTransfer = await TransferRequest.findOneAndUpdate(
       { _id: id, status: TRANSFER_STATUS.REQUESTED },
       { 
         $set: { 
@@ -110,9 +127,9 @@ export const approveTransfer = async (req, res) => {
       },
       { new: true }
     );
-
-    if (!transfer) {
-      return res.status(400).json({ error: { message: 'Transfer request not found or not in Requested status.' } });
+    
+    if (!updatedTransfer) {
+      return res.status(400).json({ error: { message: 'Transfer request not found or already processed.' } });
     }
 
     // 1. Close current allocation if it exists and is still Active
@@ -181,7 +198,24 @@ export const rejectTransfer = async (req, res) => {
     const { id } = req.params;
     const { decisionNotes } = req.body;
 
-    const transfer = await TransferRequest.findOneAndUpdate(
+    const transfer = await TransferRequest.findOne({ _id: id, status: TRANSFER_STATUS.REQUESTED });
+    if (!transfer) {
+      return res.status(400).json({ error: { message: 'Transfer request not found or not in Requested status.' } });
+    }
+
+    if (req.user.role === ROLES.DEPARTMENT_HEAD) {
+      const EmployeeModel = mongoose.model('Employee');
+      const deptHeadEmp = await EmployeeModel.findOne({ userId: req.user._id });
+      if (!deptHeadEmp || !deptHeadEmp.departmentId) {
+         return res.status(403).json({ error: { message: 'Department Head profile or department ID missing.' } });
+      }
+      const allocation = await Allocation.findById(transfer.currentAllocationId);
+      if (!allocation || !allocation.departmentId || allocation.departmentId.toString() !== deptHeadEmp.departmentId.toString()) {
+         return res.status(403).json({ error: { message: 'Department Heads can only reject transfers for assets currently assigned to their department.' } });
+      }
+    }
+
+    const updatedTransfer = await TransferRequest.findOneAndUpdate(
       { _id: id, status: TRANSFER_STATUS.REQUESTED },
       { 
         $set: { 
@@ -194,8 +228,8 @@ export const rejectTransfer = async (req, res) => {
       { new: true }
     );
 
-    if (!transfer) {
-      return res.status(400).json({ error: { message: 'Transfer request not found or not in Requested status.' } });
+    if (!updatedTransfer) {
+      return res.status(400).json({ error: { message: 'Transfer request not found or already processed.' } });
     }
 
     await logActivity({

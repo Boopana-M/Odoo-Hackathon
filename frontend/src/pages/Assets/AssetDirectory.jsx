@@ -13,6 +13,7 @@ import AssetRegistrationForm from './AssetRegistrationForm';
 import assetService from '../../services/assetService';
 import employeeService from '../../services/employeeService';
 import transferService from '../../services/transferService';
+import allocationService from '../../services/allocationService';
 import { usePermission } from '../../hooks/usePermission';
 
 export default function AssetDirectory() {
@@ -29,7 +30,9 @@ export default function AssetDirectory() {
   
   const [showMyAssets, setShowMyAssets] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   const [transferData, setTransferData] = useState({ assetId: '', destinationEmployeeId: '', reason: '' });
+  const [returnData, setReturnData] = useState({ assetId: '', allocationId: '', reason: '' });
   const [employees, setEmployees] = useState([]);
 
   const fetchAssets = async () => {
@@ -50,7 +53,8 @@ export default function AssetDirectory() {
           status: asset.lifecycleStatus,
           location: asset.location || 'Unknown',
           cost: asset.acquisitionCost || 0,
-          acquisitionDate: asset.acquisitionDate ? new Date(asset.acquisitionDate).toLocaleDateString() : 'N/A'
+          acquisitionDate: asset.acquisitionDate ? new Date(asset.acquisitionDate).toLocaleDateString() : 'N/A',
+          allocationId: asset.currentAllocationId // Assuming we might need this if populated, but we can query by assetId or we can just fetch allocations
         }));
         setAssets(mapped);
         setTotal(res.total || res.assets.length);
@@ -93,6 +97,31 @@ export default function AssetDirectory() {
   const openTransferModal = (assetId) => {
     setTransferData({ ...transferData, assetId });
     setTransferOpen(true);
+  };
+
+  const handleReturnSubmit = async () => {
+    try {
+      // Find active allocation for this asset first
+      const allocRes = await allocationService.list();
+      const activeAlloc = allocRes.allocations.find(a => a.assetId._id === returnData.assetId && a.status === 'Active');
+      if (!activeAlloc) {
+        alert('No active allocation found for this asset to return.');
+        return;
+      }
+      // Assuming requestReturn exists in allocationService (we'll implement it shortly)
+      await allocationService.requestReturn(activeAlloc._id, { returnNotes: returnData.reason });
+      setReturnOpen(false);
+      setReturnData({ assetId: '', allocationId: '', reason: '' });
+      alert('Return Request Submitted');
+      fetchAssets();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to request return');
+    }
+  };
+
+  const openReturnModal = (assetId) => {
+    setReturnData({ ...returnData, assetId });
+    setReturnOpen(true);
   };
 
   return (
@@ -175,6 +204,9 @@ export default function AssetDirectory() {
                           <Button size="small" variant="outlined" onClick={(e) => { e.stopPropagation(); openTransferModal(asset.rawId); }}>
                             Transfer
                           </Button>
+                          <Button size="small" variant="outlined" color="secondary" sx={{ ml: 1 }} onClick={(e) => { e.stopPropagation(); openReturnModal(asset.rawId); }}>
+                            Return
+                          </Button>
                         </TableCell>
                       )}
                     </TableRow>
@@ -212,6 +244,28 @@ export default function AssetDirectory() {
           fetchAssets();
         }}
       />
+
+      {/* Return Request Modal */}
+      <Dialog open={returnOpen} onClose={() => setReturnOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Request Asset Return</DialogTitle>
+        <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Requesting a return will send a notification to the Asset Manager for approval.
+          </Typography>
+          <TextField
+            label="Reason for Return / Notes"
+            fullWidth
+            multiline
+            rows={3}
+            value={returnData.reason}
+            onChange={(e) => setReturnData({ ...returnData, reason: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setReturnOpen(false)}>Cancel</Button>
+          <Button onClick={handleReturnSubmit} variant="contained" color="secondary">Submit Request</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

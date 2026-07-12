@@ -169,6 +169,20 @@ export const listAssets = async (req, res) => {
       } else {
         return res.status(200).json({ assets: [], total: 0 });
       }
+    } else if (req.user.role === ROLES.DEPARTMENT_HEAD) {
+      // Department Heads see assets assigned to their department OR shared bookable
+      const emp = await Employee.findOne({ userId: req.user._id });
+      if (emp && emp.departmentId) {
+        const allocations = await Allocation.find({ 
+          departmentId: emp.departmentId, 
+          status: ALLOCATION_STATUS.ACTIVE 
+        });
+        const assetIds = allocations.map(a => a.assetId);
+        filter.$or = [
+          { _id: { $in: assetIds } },
+          { isSharedBookable: true }
+        ];
+      }
     } else if (req.user.role === ROLES.EMPLOYEE) {
       // Employees generally only see what's shared bookable or what's explicitly assigned to them
       filter.lifecycleStatus = { $in: [ASSET_LIFECYCLE.AVAILABLE, ASSET_LIFECYCLE.ALLOCATED] };

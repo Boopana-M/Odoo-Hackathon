@@ -19,6 +19,11 @@ const employeeService = {
   async updateStatus(id, isActive) {
     const response = await api.patch(`/users/${id}/status`, { isActive });
     return response.data;
+  },
+
+  async updateDepartment(id, departmentId) {
+    const response = await api.patch(`/users/${id}/department`, { departmentId });
+    return response.data;
   }
 };
 

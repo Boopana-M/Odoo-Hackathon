@@ -10,7 +10,7 @@ import { createNotification } from '../../utils/notifier.js';
  */
 export const createMaintenanceRequest = async (req, res) => {
   try {
-    const { assetId, issueDescription, priority } = req.body;
+    const { assetId, issueDescription, priority, imageUrl } = req.body;
 
     if (!assetId || !issueDescription) {
       return res.status(400).json({ error: { message: 'Asset ID and issue description are required.' } });
@@ -48,7 +48,8 @@ export const createMaintenanceRequest = async (req, res) => {
       raisedByEmployee: emp ? emp._id : null,
       issueDescription: issueDescription.trim(),
       priority: Object.values(MAINTENANCE_PRIORITY).includes(priority) ? priority : MAINTENANCE_PRIORITY.MEDIUM,
-      status: MAINTENANCE_STATUS.PENDING
+      status: MAINTENANCE_STATUS.PENDING,
+      attachmentMetadata: imageUrl ? { url: imageUrl } : null
     });
 
     await maintenance.save();

@@ -3,7 +3,8 @@ import {
   listUsers,
   getUserById,
   updateUserRole,
-  updateUserStatus
+  updateUserStatus,
+  updateUserDepartment
 } from '../../controllers/users/userController.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { ROLES } from '../../models/index.js';
@@ -24,5 +25,8 @@ router.patch('/:id/role', requireRole(ROLES.ADMIN), updateUserRole);
 
 // PATCH /api/users/:id/status — activate or deactivate a user
 router.patch('/:id/status', requireRole(ROLES.ADMIN), updateUserStatus);
+
+// PATCH /api/users/:id/department — change user department
+router.patch('/:id/department', requireRole(ROLES.ADMIN), updateUserDepartment);
 
 export default router;

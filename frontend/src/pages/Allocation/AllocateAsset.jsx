@@ -23,7 +23,8 @@ export default function AllocateAsset() {
 
   // Transfer State
   const [transfers, setTransfers] = useState([]);
-  const [actionModal, setActionModal] = useState({ open: false, type: '', transferId: null });
+  const [returns, setReturns] = useState([]);
+  const [actionModal, setActionModal] = useState({ open: false, type: '', transferId: null, isReturn: false });
   const [actionNotes, setActionNotes] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
@@ -31,12 +32,18 @@ export default function AllocateAsset() {
 
   const loadTransfers = async () => {
     try {
-      const res = await transferService.list({ status: 'Requested' });
+      const [res, allocRes] = await Promise.all([
+        transferService.list({ status: 'Requested' }),
+        allocationService.list()
+      ]);
       if (res && res.transfers) {
         setTransfers(res.transfers);
       }
+      if (allocRes && allocRes.allocations) {
+        setReturns(allocRes.allocations.filter(a => a.status === 'Pending Return'));
+      }
     } catch (err) {
-      console.error('Failed to load transfers', err);
+      console.error('Failed to load transfers/returns', err);
     }
   };
 
@@ -95,17 +102,22 @@ export default function AllocateAsset() {
   const handleTransferAction = async () => {
     try {
       setSubmitting(true);
-      if (actionModal.type === 'Approve') {
-        await transferService.approve(actionModal.transferId, actionNotes);
+      if (actionModal.isReturn) {
+        await allocationService.returnAsset(actionModal.transferId, { returnNotes: actionNotes });
+        setSuccessMsg(`Return approved successfully`);
       } else {
-        await transferService.reject(actionModal.transferId, actionNotes);
+        if (actionModal.type === 'Approve') {
+          await transferService.approve(actionModal.transferId, actionNotes);
+        } else {
+          await transferService.reject(actionModal.transferId, actionNotes);
+        }
+        setSuccessMsg(`Transfer ${actionModal.type}d successfully`);
       }
-      setSuccessMsg(`Transfer ${actionModal.type}d successfully`);
-      setActionModal({ open: false, type: '', transferId: null });
+      setActionModal({ open: false, type: '', transferId: null, isReturn: false });
       setActionNotes('');
       loadTransfers();
     } catch (err) {
-      setErrorMsg(err.response?.data?.error?.message || `Failed to ${actionModal.type} transfer`);
+      setErrorMsg(err.response?.data?.error?.message || `Failed to process ${actionModal.isReturn ? 'return' : 'transfer'}`);
     } finally {
       setSubmitting(false);
     }
@@ -175,6 +187,7 @@ export default function AllocateAsset() {
       <Tabs value={activeTab} onChange={(e, val) => setActiveTab(val)} sx={{ mb: 3 }}>
         <Tab label="Allocate Asset" />
         <Tab label={`Pending Transfers (${transfers.length})`} />
+        <Tab label={`Pending Returns (${returns.length})`} />
       </Tabs>
 
       {errorMsg && <Alert severity="error" sx={{ mb: 3 }}>{errorMsg}</Alert>}
@@ -196,7 +209,7 @@ export default function AllocateAsset() {
 
         {isAllocated && (
           <Alert severity="error" sx={{ mb: 3 }}>
-            Already Allocated. Direct re-allocation is blocked. Submit a transfer request instead.
+            Already Allocated. Direct re-allocation is blocked. Submit a transfer request from the Asset Directory instead.
           </Alert>
         )}
 
@@ -281,9 +294,42 @@ export default function AllocateAsset() {
         </Card>
       )}
 
+      {activeTab === 2 && (
+        <Card sx={{ p: 3, borderRadius: '12px', boxShadow: '0px 4px 20px rgba(0,0,0,0.05)' }}>
+          <List>
+            {returns.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No pending returns.</Typography>
+            ) : (
+              returns.map(ret => (
+                <Paper key={ret._id} sx={{ p: 2, mb: 2, bgcolor: '#f8fafc' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight="600">
+                        {ret.assetId?.name} ({ret.assetId?.assetTag})
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Requested by: {ret.employeeId?.name || 'Department'}
+                      </Typography>
+                      <Typography variant="body2" mt={1}>
+                        Notes: {ret.returnNotes || 'No reason provided'}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Button size="small" variant="contained" color="success" sx={{ mr: 1 }} onClick={() => setActionModal({ open: true, type: 'Approve Return', transferId: ret._id, isReturn: true })}>
+                        Approve Return
+                      </Button>
+                    </Box>
+                  </Box>
+                </Paper>
+              ))
+            )}
+          </List>
+        </Card>
+      )}
+
       {/* Transfer Action Modal */}
-      <Dialog open={actionModal.open} onClose={() => setActionModal({ open: false, type: '', transferId: null })} fullWidth maxWidth="sm">
-        <DialogTitle>{actionModal.type} Transfer Request</DialogTitle>
+      <Dialog open={actionModal.open} onClose={() => setActionModal({ open: false, type: '', transferId: null, isReturn: false })} fullWidth maxWidth="sm">
+        <DialogTitle>{actionModal.type} Request</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
           <TextField
             label="Decision Notes"
@@ -295,8 +341,8 @@ export default function AllocateAsset() {
           />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setActionModal({ open: false, type: '', transferId: null })}>Cancel</Button>
-          <Button variant="contained" color={actionModal.type === 'Approve' ? 'success' : 'error'} onClick={handleTransferAction} disabled={submitting}>
+          <Button onClick={() => setActionModal({ open: false, type: '', transferId: null, isReturn: false })}>Cancel</Button>
+          <Button variant="contained" color={actionModal.type.includes('Approve') ? 'success' : 'error'} onClick={handleTransferAction} disabled={submitting}>
             {submitting ? 'Processing...' : `Confirm ${actionModal.type}`}
           </Button>
         </DialogActions>
