@@ -35,9 +35,10 @@ export const createMaintenanceRequest = async (req, res) => {
       
       const belongsToEmp = currentAllocation && currentAllocation.employeeId && currentAllocation.employeeId.toString() === emp._id.toString();
       const belongsToDept = currentAllocation && currentAllocation.departmentId && emp.departmentId && currentAllocation.departmentId.toString() === emp.departmentId.toString();
+      const isShared = asset.isSharedBookable === true;
 
-      if (!belongsToEmp && !belongsToDept) {
-        return res.status(403).json({ error: { message: 'You can only request maintenance for assets currently assigned to you or your department.' } });
+      if (!belongsToEmp && !belongsToDept && !isShared) {
+        return res.status(403).json({ error: { message: 'You can only request maintenance for assets currently assigned to you, your department, or shared resources.' } });
       }
     }
 

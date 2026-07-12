@@ -158,7 +158,7 @@ export default function MaintenanceKanban() {
       
       <Grid container spacing={2} sx={{ flex: 1, overflowX: 'auto', flexWrap: 'nowrap' }}>
         {columns.map(col => (
-          <Grid item xs={12} sm={6} md={3} key={col} sx={{ minWidth: 320 }}>
+          <Grid xs={12} sm={6} md={3} key={col} sx={{ minWidth: 320 }}>
             <Paper sx={{ p: 2, bgcolor: '#f4f6f8', height: '100%', borderRadius: '12px' }}>
               <Typography variant="subtitle1" fontWeight="600" mb={2} color="text.secondary">
                 {col}

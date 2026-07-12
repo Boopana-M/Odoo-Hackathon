@@ -200,7 +200,7 @@ export default function ResourceBooking() {
                 label="Start Date Time"
                 type="datetime-local"
                 fullWidth
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 sx={{ mb: 2 }}
@@ -210,7 +210,7 @@ export default function ResourceBooking() {
                 label="End Date Time"
                 type="datetime-local"
                 fullWidth
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 sx={{ mb: 2 }}
@@ -304,7 +304,7 @@ export default function ResourceBooking() {
             label="New Start Date Time"
             type="datetime-local"
             fullWidth
-            InputLabelProps={{ shrink: true }}
+            slotProps={{ inputLabel: { shrink: true } }}
             value={newStartTime}
             onChange={(e) => setNewStartTime(e.target.value)}
           />
@@ -312,7 +312,7 @@ export default function ResourceBooking() {
             label="New End Date Time"
             type="datetime-local"
             fullWidth
-            InputLabelProps={{ shrink: true }}
+            slotProps={{ inputLabel: { shrink: true } }}
             value={newEndTime}
             onChange={(e) => setNewEndTime(e.target.value)}
           />

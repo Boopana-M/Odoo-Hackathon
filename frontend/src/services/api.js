@@ -50,8 +50,8 @@ api.interceptors.response.use(
       console.error("Network Error: Could not reach the backend server");
     }
     
-    // Return a structured error so UI components don't crash when awaiting
-    return Promise.reject(error.response?.data?.error?.message || "An unexpected error occurred");
+    // Return the original error so UI components can parse specific data if needed
+    return Promise.reject(error);
   }
 );
 
