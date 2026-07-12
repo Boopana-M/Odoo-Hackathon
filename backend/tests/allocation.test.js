@@ -196,4 +196,61 @@ describe('Phase 7 — Asset Allocation Workflow', () => {
       assert.strictEqual(body.allocations[0].employeeId._id.toString(), empId.toString());
     });
   });
+
+  describe('Phase 9 — Overdue Derivation and Concurrency', () => {
+    test('should derive isOverdue as true when active and past expectedReturnDate', async () => {
+      const allocationDate = new Date();
+      allocationDate.setDate(allocationDate.getDate() - 4);
+      const expectedReturnDate = new Date();
+      expectedReturnDate.setDate(expectedReturnDate.getDate() - 2);
+
+      const allocation = await Allocation.create({
+        assetId: availableAssetId,
+        employeeId: empId,
+        expectedReturnDate,
+        status: ALLOCATION_STATUS.ACTIVE,
+        allocationDate
+      });
+
+      assert.strictEqual(allocation.isOverdue, true);
+    });
+
+    test('should derive isOverdue as false when status is Returned even if expectedReturnDate is in the past', async () => {
+      const allocationDate = new Date();
+      allocationDate.setDate(allocationDate.getDate() - 4);
+      const expectedReturnDate = new Date();
+      expectedReturnDate.setDate(expectedReturnDate.getDate() - 2);
+
+      const allocation = await Allocation.create({
+        assetId: availableAssetId,
+        employeeId: empId,
+        expectedReturnDate,
+        status: ALLOCATION_STATUS.RETURNED,
+        allocationDate,
+        returnDate: new Date()
+      });
+
+      assert.strictEqual(allocation.isOverdue, false);
+    });
+
+    test('should prevent multiple simultaneous active allocations for one asset', async () => {
+      // First allocation is created
+      await Allocation.create({
+        assetId: availableAssetId,
+        employeeId: empId,
+        status: ALLOCATION_STATUS.ACTIVE,
+        allocationDate: new Date()
+      });
+
+      // Try allocating again via API
+      const res = await fetch(`${baseUrl}/allocations`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${managerToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetId: availableAssetId, employeeId: empId })
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.match(body.error.message, /already|Available/i);
+    });
+  });
 });

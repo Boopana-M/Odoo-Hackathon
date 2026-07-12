@@ -108,6 +108,14 @@ allocationSchema.index({ employeeId: 1, status: 1 });
 allocationSchema.index({ departmentId: 1, status: 1 });
 allocationSchema.index({ expectedReturnDate: 1, status: 1 });
 
+// ── Overdue Derivation ────────────────────────────────────────────────────────
+allocationSchema.virtual('isOverdue').get(function () {
+  if (this.status === ALLOCATION_STATUS.ACTIVE && this.expectedReturnDate) {
+    return new Date() > this.expectedReturnDate;
+  }
+  return false;
+});
+
 // ── Concurrency note ─────────────────────────────────────────────────────────
 // CRITICAL: One Asset must never have multiple simultaneous Active allocations.
 // A naive find-then-create pre-check is NOT race-condition safe.
@@ -116,10 +124,15 @@ allocationSchema.index({ expectedReturnDate: 1, status: 1 });
 // existing Active allocation before creating a new one.
 
 allocationSchema.set('toJSON', {
+  virtuals: true,
   transform: (doc, ret) => {
     delete ret.__v;
     return ret;
   }
+});
+
+allocationSchema.set('toObject', {
+  virtuals: true
 });
 
 const Allocation = mongoose.model('Allocation', allocationSchema);
