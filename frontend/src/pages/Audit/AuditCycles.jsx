@@ -39,10 +39,15 @@ export default function AuditCycles() {
         const active = res.cycles.find(c => c.status === 'Open' || c.status === 'Planned') || res.cycles[0];
         setActiveCycle(active);
         
-        // Fetch detailed items for this audit cycle
+        // Fetch detailed items and populated cycle info
         const detail = await auditService.getById(active._id);
-        if (detail && detail.items) {
-          setAuditItems(detail.items);
+        if (detail) {
+          if (detail.cycle) {
+            setActiveCycle(detail.cycle);
+          }
+          if (detail.items) {
+            setAuditItems(detail.items);
+          }
         }
       }
       if (isManager || isAdmin) {
@@ -133,10 +138,20 @@ export default function AuditCycles() {
   const discrepancyCount = auditItems.length - verifiedCount;
   
   // Format auditors list for the widget component
-  const mappedAuditors = activeCycle.auditors?.map(a => ({
-    name: a.name || a.email,
-    initials: (a.name || a.email).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-  })) || [];
+  const mappedAuditors = activeCycle.auditors?.map(a => {
+    if (!a) return { name: 'Unknown Auditor', initials: 'UA' };
+    if (typeof a === 'string') {
+      return { name: a, initials: 'A' };
+    }
+    const nameOrEmail = a.name || a.email || 'Unknown Auditor';
+    const initials = nameOrEmail.includes('@')
+      ? nameOrEmail.charAt(0).toUpperCase()
+      : nameOrEmail.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    return {
+      name: nameOrEmail,
+      initials
+    };
+  }) || [];
 
   return (
     <Box sx={{ p: 3 }}>

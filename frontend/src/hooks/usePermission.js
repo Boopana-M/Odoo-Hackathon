@@ -10,7 +10,7 @@ export const PERMISSIONS = {
 // Centralized permission map
 export const ROLE_ROUTES = {
   [PERMISSIONS.ADMIN]: [
-    'dashboard', 'organization', 'audit', 'reports', 'notifications'
+    'dashboard', 'assets', 'allocation', 'booking', 'maintenance', 'audit', 'reports', 'organization', 'notifications'
   ],
   [PERMISSIONS.MANAGER]: [
     'dashboard', 'assets', 'allocation', 'booking', 'maintenance', 'audit', 'reports', 'notifications'
