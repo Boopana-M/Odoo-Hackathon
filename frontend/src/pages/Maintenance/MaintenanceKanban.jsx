@@ -1,17 +1,73 @@
-import React from 'react';
-import { Box, Card, Typography, Grid, Paper, Avatar, Divider } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Card, Typography, Grid, Paper, Avatar, Divider, CircularProgress } from '@mui/material';
 import PriorityChip from './components/PriorityChip';
 import MaintenanceTimeline from './components/MaintenanceTimeline';
+import maintenanceService from '../../services/maintenanceService';
 
 const columns = ['Pending Approval', 'Technician Assigned', 'In Progress', 'Resolved'];
 
-const mockCards = [
-  { id: 'AF-0062', title: 'Projector bulb not turning on', status: 'Pending Approval', priority: 'High', tech: null, currentStep: 0 },
-  { id: 'AF-003', title: 'AC unit noisy compressor', status: 'Technician Assigned', priority: 'Critical', tech: { name: 'R. Varma', initials: 'RV' }, currentStep: 1 },
-  { id: 'AF-873', title: 'Chair repair', status: 'Resolved', priority: 'Low', tech: { name: 'S. Iqbal', initials: 'SI' }, currentStep: 4 },
-];
-
 export default function MaintenanceKanban() {
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState([]);
+
+  const fetchRequests = async () => {
+    try {
+      setLoading(true);
+      const res = await maintenanceService.list();
+      if (res && res.requests) {
+        const mapped = res.requests.map(req => {
+          // Map status step
+          let step = 0;
+          let colName = 'Pending Approval';
+          
+          if (req.status === 'Pending' || req.status === 'Approved') {
+            step = 0;
+            colName = 'Pending Approval';
+          } else if (req.status === 'Technician Assigned') {
+            step = 1;
+            colName = 'Technician Assigned';
+          } else if (req.status === 'In Progress') {
+            step = 2;
+            colName = 'In Progress';
+          } else if (req.status === 'Resolved' || req.status === 'Rejected') {
+            step = 3;
+            colName = 'Resolved';
+          }
+
+          const techName = req.assignedTechnician?.name || 'Unassigned';
+          const initials = techName !== 'Unassigned' ? techName.split(' ').map(n => n[0]).join('').slice(0, 2) : '';
+
+          return {
+            id: req.assetId?.assetTag || 'AF-XXXX',
+            rawId: req._id,
+            title: req.issueDescription,
+            status: colName,
+            priority: req.priority,
+            currentStep: step,
+            tech: req.assignedTechnician ? { name: techName, initials } : null
+          };
+        });
+        setRequests(mapped);
+      }
+    } catch (err) {
+      console.error('Failed to load maintenance boards', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', height: '50vh', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Typography variant="h4" fontWeight="600" mb={3}>Maintenance Board</Typography>
@@ -24,8 +80,8 @@ export default function MaintenanceKanban() {
                 {col}
               </Typography>
               
-              {mockCards.filter(c => c.status === col).map(card => (
-                <Card key={card.id} sx={{ p: 2, mb: 2, borderRadius: '8px', cursor: 'grab', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              {requests.filter(c => c.status === col).map(card => (
+                <Card key={card.rawId} sx={{ p: 2, mb: 2, borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="subtitle2" fontWeight="700">{card.id}</Typography>
                     <PriorityChip priority={card.priority} />

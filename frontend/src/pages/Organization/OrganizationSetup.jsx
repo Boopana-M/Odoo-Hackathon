@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import departmentService from '../../services/departmentService';
+import categoryService from '../../services/categoryService';
+import employeeService from '../../services/employeeService';
 import {
   Box,
   Card,
@@ -44,39 +47,15 @@ import {
   Cancel as CancelIcon,
 } from '@mui/icons-material';
 
-// Mock Data
-const initialDepartments = [
-  { id: 'DEP-01', name: 'Engineering', manager: 'Manoj V', parent: 'Operations', status: 'Active' },
-  { id: 'DEP-02', name: 'Product Management', manager: 'Alice Vance', parent: 'Operations', status: 'Active' },
-  { id: 'DEP-03', name: 'Marketing', manager: 'Sarah Connor', parent: 'Sales & Marketing', status: 'Active' },
-  { id: 'DEP-04', name: 'Human Resources', manager: 'Emma Stone', parent: 'Executive', status: 'Active' },
-  { id: 'DEP-05', name: 'Finance', manager: 'Frank Castle', parent: 'Executive', status: 'Active' },
-];
-
-const initialCategories = [
-  { id: 'CAT-01', name: 'IT Hardware', description: 'Laptops, Monitors, Servers and Workstations', warranty: '36 Months', status: 'Active' },
-  { id: 'CAT-02', name: 'Office Furniture', description: 'Desks, Chairs, Conference room tables', warranty: '60 Months', status: 'Active' },
-  { id: 'CAT-03', name: 'Vehicles', description: 'Company cars and delivery vans', warranty: '48 Months', status: 'Active' },
-  { id: 'CAT-04', name: 'Mobile Devices', description: 'Smartphones and tablets', warranty: '24 Months', status: 'Active' },
-];
-
-const initialEmployees = [
-  { id: 'EMP-001', name: 'Manoj V', email: 'manoj.v@assetflow.com', department: 'Engineering', role: 'Asset Manager', status: 'Active' },
-  { id: 'EMP-002', name: 'Alice Vance', email: 'alice.vance@assetflow.com', department: 'Product Management', role: 'Department Head', status: 'Active' },
-  { id: 'EMP-003', name: 'Sarah Connor', email: 'sarah.connor@assetflow.com', department: 'Marketing', role: 'Department Head', status: 'Active' },
-  { id: 'EMP-004', name: 'John Doe', email: 'john.doe@assetflow.com', department: 'Engineering', role: 'Employee', status: 'Active' },
-  { id: 'EMP-005', name: 'Emma Stone', email: 'emma.stone@assetflow.com', department: 'Human Resources', role: 'Department Head', status: 'Active' },
-  { id: 'EMP-006', name: 'Frank Castle', email: 'frank.castle@assetflow.com', department: 'Finance', role: 'Employee', status: 'Inactive' },
-];
-
 export default function OrganizationSetup() {
   const [activeTab, setActiveTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
   
   // Lists state
-  const [departments, setDepartments] = useState(initialDepartments);
-  const [categories, setCategories] = useState(initialCategories);
-  const [employees, setEmployees] = useState(initialEmployees);
+  const [departments, setDepartments] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
   // Dialog open controls
   const [deptOpen, setDeptOpen] = useState(false);
@@ -89,35 +68,82 @@ export default function OrganizationSetup() {
   const [deptForm, setDeptForm] = useState({ name: '', manager: '', parent: '', status: 'Active' });
   const [catForm, setCatForm] = useState({ name: '', description: '', warranty: '', status: 'Active' });
 
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [deptRes, catRes] = await Promise.all([
+        departmentService.list(),
+        categoryService.list(),
+      ]);
+      setDepartments(deptRes.departments || []);
+      setCategories(catRes.categories || []);
+
+      const currentUserStr = localStorage.getItem('user');
+      const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+      if (currentUser && currentUser.role === 'Admin') {
+        const empRes = await employeeService.list();
+        setEmployees(empRes.users || []);
+      }
+    } catch (err) {
+      console.error('Failed to load organization settings', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
     setSearchTerm('');
   };
 
   // Add Department Action
-  const handleAddDept = () => {
-    const newId = `DEP-0${departments.length + 1}`;
-    setDepartments((prev) => [...prev, { id: newId, ...deptForm }]);
-    setDeptOpen(false);
-    setDeptForm({ name: '', manager: '', parent: '', status: 'Active' });
+  const handleAddDept = async () => {
+    try {
+      await departmentService.create({
+        name: deptForm.name,
+        isActive: deptForm.status === 'Active',
+        parentDepartmentId: deptForm.parent || null
+      });
+      setDeptOpen(false);
+      setDeptForm({ name: '', manager: '', parent: '', status: 'Active' });
+      loadData();
+    } catch (err) {
+      console.error('Failed to create department', err);
+    }
   };
 
   // Add Category Action
-  const handleAddCat = () => {
-    const newId = `CAT-0${categories.length + 1}`;
-    setCategories((prev) => [...prev, { id: newId, ...catForm }]);
-    setCatOpen(false);
-    setCatForm({ name: '', description: '', warranty: '', status: 'Active' });
+  const handleAddCat = async () => {
+    try {
+      await categoryService.create({
+        name: catForm.name,
+        description: catForm.description,
+        isActive: catForm.status === 'Active',
+        fieldDefinitions: [
+          { key: 'warranty', label: 'Warranty (Months)', type: 'string', required: false }
+        ]
+      });
+      setCatOpen(false);
+      setCatForm({ name: '', description: '', warranty: '', status: 'Active' });
+      loadData();
+    } catch (err) {
+      console.error('Failed to create category', err);
+    }
   };
 
   // Role Promotion Action
-  const handlePromoteRole = () => {
+  const handlePromoteRole = async () => {
     if (selectedEmployee) {
-      setEmployees((prev) =>
-        prev.map((emp) =>
-          emp.id === selectedEmployee.id ? { ...emp, role: selectedRole } : emp
-        )
-      );
+      try {
+        await employeeService.updateRole(selectedEmployee.id, selectedRole);
+        loadData();
+      } catch (err) {
+        console.error('Failed to promote user role', err);
+      }
     }
     setRoleOpen(false);
     setSelectedEmployee(null);
@@ -272,17 +298,17 @@ export default function OrganizationSetup() {
                   {departments
                     .filter((d) => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .map((dept) => (
-                      <TableRow key={dept.id} hover>
-                        <TableCell sx={{ fontWeight: 500 }}>{dept.id}</TableCell>
+                      <TableRow key={dept._id} hover>
+                        <TableCell sx={{ fontWeight: 500 }}>{dept._id.slice(-6).toUpperCase()}</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>{dept.name}</TableCell>
-                        <TableCell>{dept.manager}</TableCell>
-                        <TableCell>{dept.parent || '-'}</TableCell>
+                        <TableCell>{dept.departmentHeadId?.name || 'Unassigned'}</TableCell>
+                        <TableCell>{dept.parentDepartmentId?.name || '-'}</TableCell>
                         <TableCell>
                           <Chip
-                            label={dept.status}
+                            label={dept.isActive ? 'Active' : 'Inactive'}
                             size="small"
-                            color={dept.status === 'Active' ? 'success' : 'default'}
-                            icon={dept.status === 'Active' ? <CheckCircleIcon style={{ fontSize: 14 }} /> : <CancelIcon style={{ fontSize: 14 }} />}
+                            color={dept.isActive ? 'success' : 'default'}
+                            icon={dept.isActive ? <CheckCircleIcon style={{ fontSize: 14 }} /> : <CancelIcon style={{ fontSize: 14 }} />}
                             sx={{ fontWeight: 600, fontSize: '0.75rem' }}
                           />
                         </TableCell>
@@ -315,29 +341,33 @@ export default function OrganizationSetup() {
                 <TableBody>
                   {categories
                     .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((cat) => (
-                      <TableRow key={cat.id} hover>
-                        <TableCell sx={{ fontWeight: 500 }}>{cat.id}</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>{cat.name}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {cat.description}
-                        </TableCell>
-                        <TableCell>{cat.warranty}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={cat.status}
-                            size="small"
-                            color={cat.status === 'Active' ? 'success' : 'default'}
-                            sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <IconButton size="small" onClick={(e) => handleMenuClick(e, cat)}>
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    .map((cat) => {
+                      const warrantyField = cat.fieldDefinitions?.find(f => f.key === 'warranty');
+                      const warrantyVal = warrantyField?.label || '36 Months';
+                      return (
+                        <TableRow key={cat._id} hover>
+                          <TableCell sx={{ fontWeight: 500 }}>{cat._id.slice(-6).toUpperCase()}</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>{cat.name}</TableCell>
+                          <TableCell sx={{ color: 'text.secondary', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {cat.description}
+                          </TableCell>
+                          <TableCell>{warrantyVal}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={cat.isActive ? 'Active' : 'Inactive'}
+                              size="small"
+                              color={cat.isActive ? 'success' : 'default'}
+                              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <IconButton size="small" onClick={(e) => handleMenuClick(e, cat)}>
+                              <MoreVertIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -360,48 +390,58 @@ export default function OrganizationSetup() {
                 </TableHead>
                 <TableBody>
                   {employees
-                    .filter((e) => e.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((emp) => (
-                      <TableRow key={emp.id} hover>
-                        <TableCell sx={{ fontWeight: 500 }}>{emp.id}</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>{emp.name}</TableCell>
-                        <TableCell>{emp.email}</TableCell>
-                        <TableCell>{emp.department}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={emp.role}
-                            size="small"
-                            variant="outlined"
-                            color={emp.role === 'Admin' || emp.role === 'Asset Manager' ? 'primary' : 'default'}
-                            icon={<ShieldIcon style={{ fontSize: 13 }} />}
-                            sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={emp.status}
-                            size="small"
-                            color={emp.status === 'Active' ? 'success' : 'default'}
-                            sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<EditIcon sx={{ fontSize: 12 }} />}
-                            onClick={() => {
-                              setSelectedEmployee(emp);
-                              setSelectedRole(emp.role);
-                              setRoleOpen(true);
-                            }}
-                            sx={{ fontSize: '0.75rem', py: 0.25 }}
-                          >
-                            Access
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    .filter((item) => {
+                      const name = item.employee?.name || 'Unassigned';
+                      const email = item.user?.email || '';
+                      return name.toLowerCase().includes(searchTerm.toLowerCase()) || email.toLowerCase().includes(searchTerm.toLowerCase());
+                    })
+                    .map((item) => {
+                      const emp = item.employee;
+                      const usr = item.user;
+                      const empName = emp?.name || 'Unassigned';
+                      const deptName = departments.find(d => d._id === emp?.departmentId)?.name || 'Unassigned';
+                      return (
+                        <TableRow key={usr._id} hover>
+                          <TableCell sx={{ fontWeight: 500 }}>{emp?._id?.slice(-6).toUpperCase() || usr._id.slice(-6).toUpperCase()}</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>{empName}</TableCell>
+                          <TableCell>{usr.email}</TableCell>
+                          <TableCell>{deptName}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={usr.role}
+                              size="small"
+                              variant="outlined"
+                              color={usr.role === 'Admin' || usr.role === 'Asset Manager' ? 'primary' : 'default'}
+                              icon={<ShieldIcon style={{ fontSize: 13 }} />}
+                              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={usr.isActive ? 'Active' : 'Inactive'}
+                              size="small"
+                              color={usr.isActive ? 'success' : 'default'}
+                              sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<EditIcon sx={{ fontSize: 12 }} />}
+                              onClick={() => {
+                                setSelectedEmployee({ id: usr._id, name: empName, email: usr.email });
+                                setSelectedRole(usr.role);
+                                setRoleOpen(true);
+                              }}
+                              sx={{ fontSize: '0.75rem', py: 0.25 }}
+                            >
+                              Access
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -444,9 +484,10 @@ export default function OrganizationSetup() {
               label="Parent Department"
               onChange={(e) => setDeptForm({ ...deptForm, parent: e.target.value })}
             >
-              <MenuItem value="Operations">Operations</MenuItem>
-              <MenuItem value="Sales & Marketing">Sales & Marketing</MenuItem>
-              <MenuItem value="Executive">Executive</MenuItem>
+              <MenuItem value="">None</MenuItem>
+              {departments.map((d) => (
+                <MenuItem key={d._id} value={d._id}>{d.name}</MenuItem>
+              ))}
             </Select>
           </FormControl>
         </DialogContent>

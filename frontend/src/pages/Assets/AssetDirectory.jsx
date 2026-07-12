@@ -1,20 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, Card, Typography, TextField, Button, 
   Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, TablePagination,
-  InputAdornment, IconButton
+  InputAdornment, IconButton, CircularProgress
 } from '@mui/material';
 import { Search, Add, FilterList } from '@mui/icons-material';
 import AssetStatusChip from './components/AssetStatusChip';
 import AssetDetailsDrawer from './AssetDetailsDrawer';
-
-const mockAssets = [
-  { id: 'AF-0012', name: 'Dell Laptop XPS 15', category: 'Electronics', status: 'Allocated', location: 'Bengaluru, Desk 12', cost: 1200 },
-  { id: 'AF-0062', name: 'Sony Projector 4K', category: 'Electronics', status: 'Under Maintenance', location: 'HQ Floor 2', cost: 800 },
-  { id: 'AF-0201', name: 'Ergonomic Office Chair', category: 'Furniture', status: 'Available', location: 'Warehouse A', cost: 250 },
-  { id: 'AF-0334', name: 'Company Van', category: 'Vehicles', status: 'Allocated', location: 'Field Ops East', cost: 25000 },
-];
+import assetService from '../../services/assetService';
 
 export default function AssetDirectory() {
   const [page, setPage] = useState(0);
@@ -22,6 +16,42 @@ export default function AssetDirectory() {
   const [search, setSearch] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [assets, setAssets] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAssets = async () => {
+    try {
+      setLoading(true);
+      const res = await assetService.list({
+        search,
+        page: page + 1,
+        limit: rowsPerPage
+      });
+      if (res && res.assets) {
+        const mapped = res.assets.map(asset => ({
+          id: asset.assetTag,
+          rawId: asset._id,
+          name: asset.name,
+          category: asset.categoryId?.name || 'Unassigned',
+          status: asset.lifecycleStatus,
+          location: asset.location || 'Unknown',
+          cost: asset.acquisitionCost || 0,
+          acquisitionDate: asset.acquisitionDate ? new Date(asset.acquisitionDate).toLocaleDateString() : 'N/A'
+        }));
+        setAssets(mapped);
+        setTotal(res.total || res.assets.length);
+      }
+    } catch (err) {
+      console.error('Failed to fetch assets list', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssets();
+  }, [search, page, rowsPerPage]);
 
   const handleRowClick = (asset) => {
     setSelectedAsset(asset);
@@ -61,38 +91,52 @@ export default function AssetDirectory() {
         </Box>
 
         <TableContainer>
-          <Table>
-            <TableHead sx={{ bgcolor: '#f8f9fa' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Tag ID</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Location</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {mockAssets.map((asset) => (
-                <TableRow 
-                  key={asset.id} 
-                  hover 
-                  onClick={() => handleRowClick(asset)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell fontWeight="500">{asset.id}</TableCell>
-                  <TableCell>{asset.name}</TableCell>
-                  <TableCell>{asset.category}</TableCell>
-                  <TableCell><AssetStatusChip status={asset.status} /></TableCell>
-                  <TableCell>{asset.location}</TableCell>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Table>
+              <TableHead sx={{ bgcolor: '#f8f9fa' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Tag ID</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Location</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {assets.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                      No assets found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  assets.map((asset) => (
+                    <TableRow 
+                      key={asset.id} 
+                      hover 
+                      onClick={() => handleRowClick(asset)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell sx={{ fontWeight: 500 }}>{asset.id}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{asset.name}</TableCell>
+                      <TableCell>{asset.category}</TableCell>
+                      <TableCell><AssetStatusChip status={asset.status} /></TableCell>
+                      <TableCell>{asset.location}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </TableContainer>
         <TablePagination
           rowsPerPageOptions={[10, 25, 50]}
           component="div"
-          count={mockAssets.length}
+          count={total}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={(e, newPage) => setPage(newPage)}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../components/layout/AuthContext';
 import {
   Box,
   Card,
@@ -40,6 +41,7 @@ export default function Login() {
   const [errorMsg, setErrorMsg] = useState('');
   
   const navigate = useNavigate();
+  const { login, signup } = useAuth();
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -92,39 +94,45 @@ export default function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
     if (!validateForm()) return;
 
-    if (activeTab === 0) {
-      // Login flow
-      if (formData.email === 'admin@assetflow.com' && formData.password === 'admin123') {
+    try {
+      if (activeTab === 0) {
+        // Login flow
+        setSuccessMsg('Authenticating...');
+        await login(formData.email, formData.password);
         setSuccessMsg('Login successful! Redirecting...');
         setTimeout(() => {
           navigate('/dashboard');
         }, 1000);
+      } else if (activeTab === 1) {
+        // Signup flow
+        setSuccessMsg('Registering user...');
+        await signup(formData.name, formData.email, formData.password);
+        setSuccessMsg('Account created successfully! You can now log in.');
+        setTimeout(() => {
+          setActiveTab(0);
+          setFormData({
+            name: '',
+            email: formData.email,
+            password: '',
+            confirmPassword: '',
+            department: '',
+          });
+        }, 1500);
       } else {
-        setErrorMsg('Invalid email or password. Hint: admin@assetflow.com / admin123');
+        // Forgot Password flow
+        setSuccessMsg('Password reset instructions sent to your email.');
       }
-    } else if (activeTab === 1) {
-      // Signup flow
-      setSuccessMsg('Account created successfully! You can now log in.');
-      setTimeout(() => {
-        setActiveTab(0);
-        setFormData({
-          name: '',
-          email: formData.email,
-          password: '',
-          confirmPassword: '',
-          department: '',
-        });
-      }, 1500);
-    } else {
-      // Forgot Password flow
-      setSuccessMsg('Password reset instructions sent to your email.');
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message || 'Action failed. Please try again.';
+      setErrorMsg(msg);
+      setSuccessMsg('');
     }
   };
 

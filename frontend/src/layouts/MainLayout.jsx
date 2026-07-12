@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useAuth } from '../components/layout/AuthContext';
+import notificationService from '../services/notificationService';
 import {
   Box,
   Drawer,
@@ -46,8 +48,31 @@ const sidebarCollapsedWidth = 72;
 export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, employee, logout } = useAuth();
+  const initials = employee ? employee.name.split(' ').map(n => n[0]).join('').slice(0, 2) : (user?.email ? user.email[0].toUpperCase() : 'U');
+  const displayName = employee ? employee.name : (user?.email ? user.email : 'User');
+  const roleName = user ? user.role : 'Employee';
+
+  useEffect(() => {
+    async function fetchNotifications() {
+      try {
+        const data = await notificationService.list();
+        const unread = data.notifications ? data.notifications.filter(n => !n.isRead).length : 0;
+        setUnreadCount(unread);
+      } catch (err) {
+        console.error('Failed to load notifications count', err);
+      }
+    }
+    if (user) {
+      fetchNotifications();
+      // Poll every 30 seconds for live notifications
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -59,6 +84,7 @@ export default function MainLayout() {
 
   const handleLogout = () => {
     handleProfileMenuClose();
+    logout();
     navigate('/login');
   };
 
@@ -168,7 +194,7 @@ export default function MainLayout() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Tooltip title="Notifications">
               <IconButton component={Link} to="/notifications" color="inherit">
-                <Badge badgeContent={4} color="error">
+                <Badge badgeContent={unreadCount} color="error">
                   <NotificationsIcon sx={{ color: 'text.secondary' }} />
                 </Badge>
               </IconButton>
@@ -180,17 +206,17 @@ export default function MainLayout() {
               <IconButton onClick={handleProfileMenuOpen} sx={{ p: 0 }}>
                 <Avatar
                   sx={{ width: 36, height: 36, bgcolor: 'secondary.main', color: '#fff' }}
-                  alt="Manoj V"
+                  alt={displayName}
                 >
-                  MV
+                  {initials}
                 </Avatar>
               </IconButton>
               <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                  Manoj V
+                  {displayName}
                 </Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Asset Manager
+                  {roleName}
                 </Typography>
               </Box>
             </Box>
@@ -318,10 +344,10 @@ export default function MainLayout() {
                 gap: 1.5,
               }}
             >
-              <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32 }}>MV</Avatar>
+              <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32 }}>{initials}</Avatar>
               <Box>
                 <Typography variant="body2" sx={{ color: '#f8fafc', fontWeight: 600 }}>
-                  Manoj V
+                  {displayName}
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#64748b' }}>
                   Server Session Active

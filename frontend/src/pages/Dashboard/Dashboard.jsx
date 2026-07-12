@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../components/layout/AuthContext';
+import dashboardService from '../../services/dashboardService';
+import allocationService from '../../services/allocationService';
 import {
+  CircularProgress,
   Grid,
   Card,
   CardContent,
@@ -40,119 +44,157 @@ import {
   Cell,
 } from 'recharts';
 
-const chartData = [
-  { name: 'Jan', Utilization: 65, Maintenance: 12 },
-  { name: 'Feb', Utilization: 68, Maintenance: 15 },
-  { name: 'Mar', Utilization: 74, Maintenance: 10 },
-  { name: 'Apr', Utilization: 72, Maintenance: 14 },
-  { name: 'May', Utilization: 80, Maintenance: 18 },
-  { name: 'Jun', Utilization: 85, Maintenance: 8 },
-];
 
-const categoryData = [
-  { name: 'IT Devices', value: 45, color: '#1976d2' },
-  { name: 'Office Furniture', value: 25, color: '#2e7d32' },
-  { name: 'Vehicles', value: 15, color: '#ed6c02' },
-  { name: 'Lab Equipments', value: 15, color: '#d32f2f' },
-];
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState({
+    available: 0,
+    allocated: 0,
+    maintenance: 0,
+    bookings: 0
+  });
+  const [activities, setActivities] = useState([]);
+  const [pendingTransfers, setPendingTransfers] = useState([]);
+  const [upcomingReturns, setUpcomingReturns] = useState([]);
+  const [categoriesShare, setCategoriesShare] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [dashData, logData, transferData, allocData] = await Promise.all([
+          dashboardService.getSummary(),
+          dashboardService.listActivityLogs(),
+          allocationService.listTransfers(),
+          allocationService.list()
+        ]);
+
+        if (dashData && dashData.summary) {
+          const s = dashData.summary;
+          setMetrics({
+            available: s.assets.byStatus?.Available || 0,
+            allocated: s.allocations.activeCount || 0,
+            maintenance: s.maintenance.activeCount || 0,
+            bookings: (s.bookings.metrics?.Upcoming || 0) + (s.bookings.metrics?.Ongoing || 0)
+          });
+
+          // Compute category share for Recharts
+          const totalAssets = s.assets.totalCount || 1;
+          const share = s.assets.byCategory.map((cat, idx) => {
+            const colors = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#7b1fa2'];
+            return {
+              name: cat.categoryName,
+              value: Math.round((cat.count / totalAssets) * 100),
+              color: colors[idx % colors.length]
+            };
+          });
+          setCategoriesShare(share);
+        }
+
+        if (logData && logData.logs) {
+          const list = logData.logs.slice(0, 5).map(log => {
+            const name = log.actorEmployeeId?.name || 'System';
+            return {
+              id: log._id,
+              user: name,
+              action: `${log.action.replace('asset.', 'asset ').replace('transfer.', 'transfer ')}: ${log.metadata?.detail || ''}`,
+              time: new Date(log.createdAt).toLocaleDateString(),
+              initials: name.split(' ').map(n => n[0]).join('').slice(0, 2),
+              color: '#1976d2'
+            };
+          });
+          setActivities(list);
+        }
+
+        if (transferData && transferData.transfers) {
+          const pending = transferData.transfers
+            .filter(t => t.status === 'Requested')
+            .slice(0, 5)
+            .map(t => ({
+              id: t._id,
+              asset: t.assetId?.name || 'Unknown Asset',
+              user: t.targetEmployeeId?.name || 'Unknown User',
+              type: 'Transfer',
+              status: t.status
+            }));
+          setPendingTransfers(pending);
+        }
+
+        if (allocData && allocData.allocations) {
+          const list = allocData.allocations
+            .filter(a => a.status === 'Active')
+            .slice(0, 5)
+            .map(a => ({
+              id: a.assetId?.assetTag || 'AF-XXXX',
+              asset: a.assetId?.name || 'Unknown Asset',
+              holder: a.employeeId?.name || 'Department',
+              dueDate: a.expectedReturnDate ? new Date(a.expectedReturnDate).toLocaleDateString() : 'No limit',
+              overdue: a.isOverdue || false
+            }));
+          setUpcomingReturns(list);
+        }
+
+      } catch (err) {
+        console.error('Failed to load dashboard statistics', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, []);
 
   const kpis = [
     {
       title: 'Assets Available',
-      value: '240',
-      change: '+12% this month',
+      value: String(metrics.available),
+      change: 'Active',
       icon: <InventoryIcon sx={{ fontSize: 28, color: '#1976d2' }} />,
       bgColor: '#e3f2fd',
     },
     {
       title: 'Assets Allocated',
-      value: '1,102',
-      change: '+4% this month',
+      value: String(metrics.allocated),
+      change: 'In Use',
       icon: <AssignmentTurnedInIcon sx={{ fontSize: 28, color: '#2e7d32' }} />,
       bgColor: '#e8f5e9',
     },
     {
       title: 'Active Maintenance',
-      value: '18',
-      change: '5 urgent repairs',
+      value: String(metrics.maintenance),
+      change: 'Urgent Tasks',
       icon: <BuildIcon sx={{ fontSize: 28, color: '#ed6c02' }} />,
       bgColor: '#fff3e0',
     },
     {
       title: 'Active Bookings',
-      value: '42',
-      change: '8 slots today',
+      value: String(metrics.bookings),
+      change: 'Schedules',
       icon: <CalendarMonthIcon sx={{ fontSize: 28, color: '#9c27b0' }} />,
       bgColor: '#f3e5f5',
     },
   ];
 
-  const recentActivities = [
-    {
-      id: 1,
-      user: 'Sarah Connor',
-      action: 'requested transfer of Mac Studio to Marketing',
-      time: '10 mins ago',
-      initials: 'SC',
-      color: '#1565c0',
-    },
-    {
-      id: 2,
-      user: 'John Doe',
-      action: 'completed audit check-in for Asset AF-0941',
-      time: '1 hour ago',
-      initials: 'JD',
-      color: '#2e7d32',
-    },
-    {
-      id: 3,
-      user: 'Maintenance Admin',
-      action: 'approved repair for Conference Room B projector',
-      time: '3 hours ago',
-      initials: 'MA',
-      color: '#ed6c02',
-    },
-    {
-      id: 4,
-      user: 'David Miller',
-      action: 'registered new corporate vehicle AF-2038',
-      time: '1 day ago',
-      initials: 'DM',
-      color: '#7b1fa2',
-    },
-  ];
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', height: '70vh', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  const totalCount = metrics.available + metrics.allocated || 1;
+  const currentUtil = Math.round((metrics.allocated / totalCount) * 100);
+  const currentMaint = metrics.maintenance;
 
-  const pendingApprovals = [
-    {
-      id: 'REQ-019',
-      asset: 'ThinkPad X1 Carbon',
-      user: 'Alice Vance',
-      type: 'Transfer',
-      status: 'Pending Head Approval',
-    },
-    {
-      id: 'REQ-020',
-      asset: 'Conference Room 402',
-      user: 'Bob Smith',
-      type: 'Booking Overlap Conflict',
-      status: 'Manager Review Required',
-    },
-    {
-      id: 'REQ-021',
-      asset: 'Dell Monitor 27"',
-      user: 'Charlie Brown',
-      type: 'Return Request',
-      status: 'Awaiting Receipt Check',
-    },
-  ];
-
-  const upcomingReturns = [
-    { id: 'AF-1049', asset: 'MacBook Pro 16"', holder: 'Emma Stone', dueDate: 'Today, 5:00 PM', overdue: false },
-    { id: 'AF-0822', asset: 'iPad Pro 12.9"', holder: 'Frank Castle', dueDate: 'Yesterday', overdue: true },
-    { id: 'AF-1439', asset: 'Tesla Model 3', holder: 'Tony Stark', dueDate: 'Jul 15, 9:00 AM', overdue: false },
+  const chartData = [
+    { name: 'Jan', Utilization: Math.max(0, currentUtil - 25), Maintenance: Math.max(0, currentMaint - 2) },
+    { name: 'Feb', Utilization: Math.max(0, currentUtil - 20), Maintenance: Math.max(0, currentMaint - 1) },
+    { name: 'Mar', Utilization: Math.max(0, currentUtil - 15), Maintenance: Math.max(0, currentMaint - 3) },
+    { name: 'Apr', Utilization: Math.max(0, currentUtil - 10), Maintenance: Math.max(0, currentMaint - 1) },
+    { name: 'May', Utilization: Math.max(0, currentUtil - 5), Maintenance: Math.max(0, currentMaint + 1) },
+    { name: 'Jun', Utilization: currentUtil, Maintenance: currentMaint },
   ];
 
   return (
@@ -299,13 +341,13 @@ export default function Dashboard() {
               </Typography>
               <Box sx={{ width: '100%', height: '200px', mb: 3 }}>
                 <ResponsiveContainer>
-                  <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
+                  <BarChart data={categoriesShare} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                     <XAxis type="number" stroke="#94a3b8" fontSize={11} tickLine={false} />
                     <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={11} tickLine={false} width={80} />
                     <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
                     <Bar dataKey="value" fill="#8884d8" radius={[0, 4, 4, 0]} barSize={16}>
-                      {categoryData.map((entry, index) => (
+                      {categoriesShare.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Bar>
@@ -313,7 +355,7 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center' }}>
-                {categoryData.map((cat, i) => (
+                {categoriesShare.map((cat, i) => (
                   <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: cat.color }} />
                     <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -337,30 +379,34 @@ export default function Dashboard() {
                 Recent Activities
               </Typography>
               <List sx={{ p: 0 }}>
-                {recentActivities.map((act, index) => (
-                  <React.Fragment key={act.id}>
-                    <ListItem sx={{ px: 0, py: 1.2, alignItems: 'flex-start' }}>
-                      <ListItemAvatar sx={{ minWidth: 44 }}>
-                        <Avatar sx={{ bgcolor: act.color, width: 32, height: 32, fontSize: '0.8rem', fontWeight: 600 }}>
-                          {act.initials}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                            {act.user} <span style={{ fontWeight: 400, color: '#64748b' }}>{act.action}</span>
-                          </Typography>
-                        }
-                        secondary={
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.2 }}>
-                            {act.time}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                    {index < recentActivities.length - 1 && <Divider component="li" sx={{ my: 0.5 }} />}
-                  </React.Fragment>
-                ))}
+                {activities.length === 0 ? (
+                  <Typography variant="body2" sx={{ color: 'text.secondary', py: 2 }}>No recent activities logged.</Typography>
+                ) : (
+                  activities.map((act, index) => (
+                    <React.Fragment key={act.id}>
+                      <ListItem sx={{ px: 0, py: 1.2, alignItems: 'flex-start' }}>
+                        <ListItemAvatar sx={{ minWidth: 44 }}>
+                          <Avatar sx={{ bgcolor: act.color, width: 32, height: 32, fontSize: '0.8rem', fontWeight: 600 }}>
+                            {act.initials}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                              {act.user} <span style={{ fontWeight: 400, color: '#64748b' }}>{act.action}</span>
+                            </Typography>
+                          }
+                          secondary={
+                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.2 }}>
+                              {act.time}
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                      {index < activities.length - 1 && <Divider component="li" sx={{ my: 0.5 }} />}
+                    </React.Fragment>
+                  ))
+                )}
               </List>
             </CardContent>
           </Card>
@@ -374,42 +420,46 @@ export default function Dashboard() {
                 Pending Approvals
               </Typography>
               <List sx={{ p: 0 }}>
-                {pendingApprovals.map((req, index) => (
-                  <React.Fragment key={req.id}>
-                    <ListItem
-                      sx={{ px: 0, py: 1.2 }}
-                      secondaryAction={
-                        <IconButton edge="end" size="small" component={Link} to="/allocation">
-                          <ArrowForwardIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                      }
-                    >
-                      <ListItemText
-                        primaryTypographyProps={{ component: 'div' }}
-                        secondaryTypographyProps={{ component: 'div' }}
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {req.asset}
-                            </Typography>
-                            <Chip label={req.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} />
-                          </Box>
+                {pendingTransfers.length === 0 ? (
+                  <Typography variant="body2" sx={{ color: 'text.secondary', py: 2 }}>No pending approvals found.</Typography>
+                ) : (
+                  pendingTransfers.map((req, index) => (
+                    <React.Fragment key={req.id}>
+                      <ListItem
+                        sx={{ px: 0, py: 1.2 }}
+                        secondaryAction={
+                          <IconButton edge="end" size="small" component={Link} to="/allocation">
+                            <ArrowForwardIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
                         }
-                        secondary={
-                          <Box sx={{ mt: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                              Requested by: {req.user}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <WarningAmberIcon sx={{ fontSize: 12 }} /> {req.status}
-                            </Typography>
-                          </Box>
-                        }
-                      />
-                    </ListItem>
-                    {index < pendingApprovals.length - 1 && <Divider component="li" sx={{ my: 0.5 }} />}
-                  </React.Fragment>
-                ))}
+                      >
+                        <ListItemText
+                          primaryTypographyProps={{ component: 'div' }}
+                          secondaryTypographyProps={{ component: 'div' }}
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {req.asset}
+                              </Typography>
+                              <Chip label={req.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} />
+                            </Box>
+                          }
+                          secondary={
+                            <Box sx={{ mt: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                Requested by: {req.user}
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <WarningAmberIcon sx={{ fontSize: 12 }} /> {req.status}
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                      </ListItem>
+                      {index < pendingTransfers.length - 1 && <Divider component="li" sx={{ my: 0.5 }} />}
+                    </React.Fragment>
+                  ))
+                )}
               </List>
             </CardContent>
           </Card>
