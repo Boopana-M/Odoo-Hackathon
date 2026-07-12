@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../components/layout/AuthContext';
+import { usePermission } from '../hooks/usePermission';
 import notificationService from '../services/notificationService';
 import {
   Box,
@@ -52,6 +53,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, employee, logout } = useAuth();
+  const { canAccessRoute } = usePermission();
   const initials = employee ? employee.name.split(' ').map(n => n[0]).join('').slice(0, 2) : (user?.email ? user.email[0].toUpperCase() : 'U');
   const displayName = employee ? employee.name : (user?.email ? user.email : 'User');
   const roleName = user ? user.role : 'Employee';
@@ -102,7 +104,7 @@ export default function MainLayout() {
     { text: 'Audit Cycles', icon: <FactCheckIcon />, path: '/audit' },
     { text: 'Analytics & Reports', icon: <BarChartIcon />, path: '/reports' },
     { text: 'Organization Setup', icon: <BusinessIcon />, path: '/organization' },
-  ];
+  ].filter(item => canAccessRoute(item.path.substring(1)));
 
   // Helper to generate dynamic breadcrumbs
   const getBreadcrumbs = () => {
@@ -317,9 +319,11 @@ export default function MainLayout() {
                   {!collapsed && (
                     <ListItemText
                       primary={item.text}
-                      primaryTypographyProps={{
-                        fontSize: '0.875rem',
-                        fontWeight: active ? 600 : 500,
+                      sx={{
+                        '& .MuiListItemText-primary': {
+                          fontSize: '0.875rem',
+                          fontWeight: active ? 600 : 500,
+                        }
                       }}
                     />
                   )}

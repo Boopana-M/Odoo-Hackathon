@@ -372,12 +372,14 @@ export default function Login() {
                       onChange={handleInputChange}
                       error={!!errors.department}
                       helperText={errors.department}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Business sx={{ color: 'text.secondary', fontSize: 20 }} />
-                          </InputAdornment>
-                        ),
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Business sx={{ color: 'text.secondary', fontSize: 20 }} />
+                            </InputAdornment>
+                          ),
+                        }
                       }}
                     />
                   </>
@@ -391,12 +393,14 @@ export default function Login() {
                   onChange={handleInputChange}
                   error={!!errors.email}
                   helperText={errors.email}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Email sx={{ color: 'text.secondary', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Email sx={{ color: 'text.secondary', fontSize: 20 }} />
+                        </InputAdornment>
+                      ),
+                    }
                   }}
                 />
 

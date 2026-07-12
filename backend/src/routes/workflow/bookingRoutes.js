@@ -3,7 +3,8 @@ import {
   createBooking,
   listBookings,
   getBookingDetail,
-  cancelBooking
+  cancelBooking,
+  updateBooking
 } from '../../controllers/workflow/bookingController.js';
 import { authenticate } from '../../middleware/auth.js';
 
@@ -20,6 +21,9 @@ router.get('/:id', getBookingDetail);
 
 // Create booking
 router.post('/', createBooking);
+
+// Update/Reschedule booking
+router.patch('/:id', updateBooking);
 
 // Cancel booking
 router.patch('/:id/cancel', cancelBooking);

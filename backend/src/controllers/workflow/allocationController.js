@@ -160,7 +160,8 @@ export const allocateAsset = async (req, res) => {
     if (error.name === 'CastError') {
       return res.status(400).json({ error: { message: 'Invalid ID format.' } });
     }
-    return res.status(500).json({ error: { message: 'Failed to allocate asset.' } });
+    console.error('Allocation Error:', error);
+    return res.status(500).json({ error: { message: 'Failed to allocate asset.', details: error.message } });
   }
 };
 

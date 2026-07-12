@@ -65,8 +65,8 @@ export default function OrganizationSetup() {
   // Selected item / form state
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedRole, setSelectedRole] = useState('');
-  const [deptForm, setDeptForm] = useState({ name: '', manager: '', parent: '', status: 'Active' });
-  const [catForm, setCatForm] = useState({ name: '', description: '', warranty: '', status: 'Active' });
+  const [deptForm, setDeptForm] = useState({ id: null, name: '', manager: '', parent: '', status: 'Active' });
+  const [catForm, setCatForm] = useState({ id: null, name: '', description: '', warranty: '', status: 'Active' });
 
   const loadData = async () => {
     try {
@@ -100,38 +100,54 @@ export default function OrganizationSetup() {
     setSearchTerm('');
   };
 
-  // Add Department Action
+  // Add or Edit Department Action
   const handleAddDept = async () => {
     try {
-      await departmentService.create({
-        name: deptForm.name,
-        isActive: deptForm.status === 'Active',
-        parentDepartmentId: deptForm.parent || null
-      });
+      if (deptForm.id) {
+        await departmentService.update(deptForm.id, {
+          name: deptForm.name,
+          isActive: deptForm.status === 'Active',
+          parentDepartmentId: deptForm.parent || null
+        });
+      } else {
+        await departmentService.create({
+          name: deptForm.name,
+          isActive: deptForm.status === 'Active',
+          parentDepartmentId: deptForm.parent || null
+        });
+      }
       setDeptOpen(false);
-      setDeptForm({ name: '', manager: '', parent: '', status: 'Active' });
+      setDeptForm({ id: null, name: '', manager: '', parent: '', status: 'Active' });
       loadData();
     } catch (err) {
-      console.error('Failed to create department', err);
+      console.error('Failed to save department', err);
     }
   };
 
-  // Add Category Action
+  // Add or Edit Category Action
   const handleAddCat = async () => {
     try {
-      await categoryService.create({
-        name: catForm.name,
-        description: catForm.description,
-        isActive: catForm.status === 'Active',
-        fieldDefinitions: [
-          { key: 'warranty', label: 'Warranty (Months)', type: 'string', required: false }
-        ]
-      });
+      if (catForm.id) {
+        await categoryService.update(catForm.id, {
+          name: catForm.name,
+          description: catForm.description,
+          isActive: catForm.status === 'Active',
+        });
+      } else {
+        await categoryService.create({
+          name: catForm.name,
+          description: catForm.description,
+          isActive: catForm.status === 'Active',
+          fieldDefinitions: [
+            { key: 'warranty', label: 'Warranty (Months)', type: 'string', required: false }
+          ]
+        });
+      }
       setCatOpen(false);
-      setCatForm({ name: '', description: '', warranty: '', status: 'Active' });
+      setCatForm({ id: null, name: '', description: '', warranty: '', status: 'Active' });
       loadData();
     } catch (err) {
-      console.error('Failed to create category', err);
+      console.error('Failed to save category', err);
     }
   };
 
@@ -161,6 +177,49 @@ export default function OrganizationSetup() {
   const handleMenuClose = () => {
     setAnchorEl(null);
     setMenuTarget(null);
+  };
+
+  const handleEditOpen = () => {
+    if (!menuTarget) return;
+    if (activeTab === 0) {
+      // Department
+      setDeptForm({
+        id: menuTarget._id,
+        name: menuTarget.name,
+        manager: menuTarget.departmentHeadId?._id || '',
+        parent: menuTarget.parentDepartmentId?._id || '',
+        status: menuTarget.isActive ? 'Active' : 'Inactive'
+      });
+      setDeptOpen(true);
+    } else if (activeTab === 1) {
+      // Category
+      const warrantyField = menuTarget.fieldDefinitions?.find(f => f.key === 'warranty');
+      setCatForm({
+        id: menuTarget._id,
+        name: menuTarget.name,
+        description: menuTarget.description,
+        warranty: warrantyField?.label || '36 Months',
+        status: menuTarget.isActive ? 'Active' : 'Inactive'
+      });
+      setCatOpen(true);
+    }
+    handleMenuClose();
+  };
+
+  const handleToggleStatus = async () => {
+    if (!menuTarget) return;
+    try {
+      const newStatus = !menuTarget.isActive;
+      if (activeTab === 0) {
+        await departmentService.update(menuTarget._id, { isActive: newStatus });
+      } else if (activeTab === 1) {
+        await categoryService.update(menuTarget._id, { isActive: newStatus });
+      }
+      loadData();
+    } catch (err) {
+      console.error('Failed to toggle status', err);
+    }
+    handleMenuClose();
   };
 
   return (
@@ -268,12 +327,18 @@ export default function OrganizationSetup() {
                 }}
               />
               {activeTab === 0 && (
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDeptOpen(true)}>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => {
+                  setDeptForm({ id: null, name: '', manager: '', parent: '', status: 'Active' });
+                  setDeptOpen(true);
+                }}>
                   Add Dept
                 </Button>
               )}
               {activeTab === 1 && (
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCatOpen(true)}>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => {
+                  setCatForm({ id: null, name: '', description: '', warranty: '', status: 'Active' });
+                  setCatOpen(true);
+                }}>
                   Add Category
                 </Button>
               )}
@@ -451,19 +516,21 @@ export default function OrganizationSetup() {
 
       {/* Row context Action menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        <MenuItem onClick={handleMenuClose}>
+        <MenuItem onClick={handleEditOpen}>
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Modify Details</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleMenuClose} sx={{ color: 'error.main' }}>
-          <ListItemIcon><CancelIcon fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Set Inactive</ListItemText>
+        <MenuItem onClick={handleToggleStatus} sx={{ color: menuTarget?.isActive ? 'error.main' : 'success.main' }}>
+          <ListItemIcon>
+            {menuTarget?.isActive ? <CancelIcon fontSize="small" color="error" /> : <CheckCircleIcon fontSize="small" color="success" />}
+          </ListItemIcon>
+          <ListItemText>{menuTarget?.isActive ? 'Set Inactive' : 'Set Active'}</ListItemText>
         </MenuItem>
       </Menu>
 
       {/* DIALOG 1: ADD DEPARTMENT */}
       <Dialog open={deptOpen} onClose={() => setDeptOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Add New Department</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>{deptForm.id ? 'Edit Department' : 'Add New Department'}</DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <TextField
             label="Department Name"
@@ -472,9 +539,11 @@ export default function OrganizationSetup() {
             onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
           />
           <TextField
-            label="Manager Name"
+            label="Manager Name (Not Used Yet)"
             fullWidth
             value={deptForm.manager}
+            disabled
+            helperText="Manager assignment relies on Employee Object IDs."
             onChange={(e) => setDeptForm({ ...deptForm, manager: e.target.value })}
           />
           <FormControl fullWidth>
@@ -485,7 +554,7 @@ export default function OrganizationSetup() {
               onChange={(e) => setDeptForm({ ...deptForm, parent: e.target.value })}
             >
               <MenuItem value="">None</MenuItem>
-              {departments.map((d) => (
+              {departments.filter(d => d._id !== deptForm.id).map((d) => (
                 <MenuItem key={d._id} value={d._id}>{d.name}</MenuItem>
               ))}
             </Select>
@@ -493,13 +562,13 @@ export default function OrganizationSetup() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button onClick={() => setDeptOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddDept} variant="contained">Create Department</Button>
+          <Button onClick={handleAddDept} variant="contained">{deptForm.id ? 'Save Changes' : 'Create Department'}</Button>
         </DialogActions>
       </Dialog>
 
       {/* DIALOG 2: ADD CATEGORY */}
       <Dialog open={catOpen} onClose={() => setCatOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Add Asset Category</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>{catForm.id ? 'Edit Asset Category' : 'Add Asset Category'}</DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <TextField
             label="Category Name"
@@ -524,7 +593,7 @@ export default function OrganizationSetup() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button onClick={() => setCatOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddCat} variant="contained">Create Category</Button>
+          <Button onClick={handleAddCat} variant="contained">{catForm.id ? 'Save Changes' : 'Create Category'}</Button>
         </DialogActions>
       </Dialog>
 

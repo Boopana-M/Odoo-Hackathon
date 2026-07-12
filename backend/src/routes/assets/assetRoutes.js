@@ -18,8 +18,8 @@ router.use(authenticate);
 router.get('/', listAssets);
 router.get('/:id', getAssetById);
 
-// Admin & Asset Manager only for mutation
-router.post('/', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), createAsset);
-router.put('/:id', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), updateAsset);
+// Asset Manager only for mutation
+router.post('/', requireRole(ROLES.ASSET_MANAGER), createAsset);
+router.put('/:id', requireRole(ROLES.ASSET_MANAGER), updateAsset);
 
 export default router;

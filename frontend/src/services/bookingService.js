@@ -19,6 +19,11 @@ const bookingService = {
   async cancel(id, reason = '') {
     const response = await api.patch(`/bookings/${id}/cancel`, { cancellationReason: reason });
     return response.data;
+  },
+
+  async update(id, data) {
+    const response = await api.patch(`/bookings/${id}`, data);
+    return response.data;
   }
 };
 

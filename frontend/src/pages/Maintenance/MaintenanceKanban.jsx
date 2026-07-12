@@ -1,14 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Card, Typography, Grid, Paper, Avatar, Divider, CircularProgress } from '@mui/material';
+import { Box, Card, Typography, Grid, Paper, Avatar, Divider, CircularProgress, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, InputLabel, FormControl } from '@mui/material';
+import { MoreVert as MoreVertIcon } from '@mui/icons-material';
 import PriorityChip from './components/PriorityChip';
 import MaintenanceTimeline from './components/MaintenanceTimeline';
 import maintenanceService from '../../services/maintenanceService';
+import employeeService from '../../services/employeeService';
+import assetService from '../../services/assetService';
+import { useAuth } from '../../components/layout/AuthContext';
+import { usePermission } from '../../hooks/usePermission';
 
 const columns = ['Pending Approval', 'Technician Assigned', 'In Progress', 'Resolved'];
 
 export default function MaintenanceKanban() {
+  const { user } = useAuth();
+  const { isManager, isAdmin } = usePermission();
+
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState([]);
+  
+  // Data for modals
+  const [employees, setEmployees] = useState([]);
+  const [assets, setAssets] = useState([]);
+
+  // Modals state
+  const [actionModal, setActionModal] = useState({ open: false, type: '', request: null });
+  const [raiseOpen, setRaiseOpen] = useState(false);
+  
+  // Form fields
+  const [notes, setNotes] = useState('');
+  const [selectedTech, setSelectedTech] = useState('');
+  
+  const [raiseData, setRaiseData] = useState({ assetId: '', issueDescription: '', priority: 'Medium' });
+
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [menuReq, setMenuReq] = useState(null);
 
   const fetchRequests = async () => {
     try {
@@ -56,9 +81,66 @@ export default function MaintenanceKanban() {
     }
   };
 
+  const loadDependencies = async () => {
+    try {
+      if (isManager || isAdmin) {
+        const empRes = await employeeService.list();
+        if (empRes?.users) setEmployees(empRes.users);
+      }
+      const assetRes = await assetService.list();
+      if (assetRes?.assets) setAssets(assetRes.assets);
+    } catch (err) {
+      console.error('Failed to load dependencies', err);
+    }
+  };
+
   useEffect(() => {
     fetchRequests();
+    loadDependencies();
   }, []);
+
+  const handleMenuClick = (event, req) => {
+    setAnchorEl(event.currentTarget);
+    setMenuReq(req);
+  };
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setMenuReq(null);
+  };
+
+  const openModal = (type, req = menuReq) => {
+    handleMenuClose();
+    setActionModal({ open: true, type, request: req });
+    setNotes('');
+    setSelectedTech('');
+  };
+
+  const submitAction = async () => {
+    try {
+      const { type, request } = actionModal;
+      if (type === 'Approve') await maintenanceService.approve(request.rawId, notes);
+      if (type === 'Reject') await maintenanceService.reject(request.rawId, notes);
+      if (type === 'Assign') await maintenanceService.assign(request.rawId, selectedTech);
+      if (type === 'Start') await maintenanceService.updateProgress(request.rawId, notes);
+      if (type === 'Resolve') await maintenanceService.resolve(request.rawId, notes);
+      
+      setActionModal({ open: false, type: '', request: null });
+      fetchRequests();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Action failed');
+    }
+  };
+
+  const handleRaiseSubmit = async () => {
+    try {
+      await maintenanceService.create(raiseData);
+      setRaiseOpen(false);
+      setRaiseData({ assetId: '', issueDescription: '', priority: 'Medium' });
+      fetchRequests();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to raise request');
+    }
+  };
 
   if (loading) {
     return (
@@ -70,7 +152,10 @@ export default function MaintenanceKanban() {
 
   return (
     <Box sx={{ p: 3, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h4" fontWeight="600" mb={3}>Maintenance Board</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" fontWeight="600">Maintenance Board</Typography>
+        <Button variant="contained" onClick={() => setRaiseOpen(true)}>Raise Request</Button>
+      </Box>
       
       <Grid container spacing={2} sx={{ flex: 1, overflowX: 'auto', flexWrap: 'nowrap' }}>
         {columns.map(col => (
@@ -101,6 +186,10 @@ export default function MaintenanceKanban() {
                     ) : (
                       <Typography variant="caption" color="text.disabled">Unassigned</Typography>
                     )}
+                    
+                    <IconButton size="small" onClick={(e) => handleMenuClick(e, card)}>
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
                   </Box>
                   
                   <MaintenanceTimeline currentStepIndex={card.currentStep} />
@@ -110,6 +199,108 @@ export default function MaintenanceKanban() {
           </Grid>
         ))}
       </Grid>
+
+      {/* Action Menu */}
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+        {menuReq?.status === 'Pending Approval' && (isManager || isAdmin) && [
+          <MenuItem key="Approve" onClick={() => openModal('Approve')}>Approve</MenuItem>,
+          <MenuItem key="Reject" onClick={() => openModal('Reject')}>Reject</MenuItem>
+        ]}
+        {menuReq?.status === 'Pending Approval' && menuReq?.currentStep === 0 && (
+          <MenuItem key="Start" onClick={() => openModal('Start')}>Start Work (Bypass)</MenuItem>
+        )}
+        {menuReq?.status === 'Technician Assigned' && (
+          <MenuItem key="Start" onClick={() => openModal('Start')}>Start Work</MenuItem>
+        )}
+        {menuReq?.status === 'In Progress' && (
+          <MenuItem key="Resolve" onClick={() => openModal('Resolve')}>Resolve</MenuItem>
+        )}
+        {(isManager || isAdmin) && menuReq?.status !== 'Resolved' && (
+          <MenuItem key="Assign" onClick={() => openModal('Assign')}>Assign Technician</MenuItem>
+        )}
+      </Menu>
+
+      {/* Action Modal */}
+      <Dialog open={actionModal.open} onClose={() => setActionModal({ open: false, type: '', request: null })} fullWidth maxWidth="sm">
+        <DialogTitle>{actionModal.type} Request {actionModal.request?.id}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          {actionModal.type === 'Assign' && (
+            <FormControl fullWidth>
+              <InputLabel>Technician</InputLabel>
+              <Select
+                value={selectedTech}
+                label="Technician"
+                onChange={(e) => setSelectedTech(e.target.value)}
+              >
+                {employees.map(emp => (
+                  <MenuItem key={emp._id} value={emp.employee?._id}>{emp.employee?.name} ({emp.user?.email})</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          <TextField
+            label="Notes"
+            fullWidth
+            multiline
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setActionModal({ open: false, type: '', request: null })}>Cancel</Button>
+          <Button variant="contained" onClick={submitAction}>Confirm</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Raise Request Modal */}
+      <Dialog open={raiseOpen} onClose={() => setRaiseOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Raise Maintenance Request</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel>Asset</InputLabel>
+            <Select
+              value={raiseData.assetId}
+              label="Asset"
+              onChange={(e) => setRaiseData({ ...raiseData, assetId: e.target.value })}
+            >
+              {assets.map(a => (
+                <MenuItem key={a._id} value={a._id}>{a.name} ({a.assetTag})</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth>
+            <InputLabel>Priority</InputLabel>
+            <Select
+              value={raiseData.priority}
+              label="Priority"
+              onChange={(e) => setRaiseData({ ...raiseData, priority: e.target.value })}
+            >
+              <MenuItem value="High">High</MenuItem>
+              <MenuItem value="Medium">Medium</MenuItem>
+              <MenuItem value="Low">Low</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField
+            label="Issue Description"
+            fullWidth
+            multiline
+            rows={3}
+            value={raiseData.issueDescription}
+            onChange={(e) => setRaiseData({ ...raiseData, issueDescription: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setRaiseOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleRaiseSubmit}
+            disabled={!raiseData.assetId || raiseData.issueDescription.trim().length < 5}
+          >
+            Submit
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

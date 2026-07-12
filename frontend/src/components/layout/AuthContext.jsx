@@ -44,13 +44,19 @@ export function AuthProvider({ children }) {
     setEmployee(null);
   };
 
+  const isAuthenticated = !!user;
+
   return (
-    <AuthContext.Provider value={{ user, employee, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, employee, loading, login, signup, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used inside AuthProvider');
+  }
+  return context;
 }

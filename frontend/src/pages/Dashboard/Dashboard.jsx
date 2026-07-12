@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../components/layout/AuthContext';
+import { usePermission } from '../../hooks/usePermission';
 import dashboardService from '../../services/dashboardService';
 import allocationService from '../../services/allocationService';
 import {
@@ -49,6 +50,7 @@ import {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin, isManager, isEmployee } = usePermission();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     available: 0,
@@ -64,76 +66,87 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [dashData, logData, transferData, allocData] = await Promise.all([
-          dashboardService.getSummary(),
-          dashboardService.listActivityLogs(),
-          allocationService.listTransfers(),
-          allocationService.list()
-        ]);
+        if (isAdmin || isManager) {
+          // Managers & Admins fetch full summary
+          const [dashData, logData, transferData, allocData] = await Promise.all([
+            dashboardService.getSummary().catch(() => null),
+            dashboardService.listActivityLogs().catch(() => null),
+            allocationService.listTransfers().catch(() => null),
+            allocationService.list().catch(() => null)
+          ]);
 
-        if (dashData && dashData.summary) {
-          const s = dashData.summary;
+          if (dashData && dashData.summary) {
+            const s = dashData.summary;
+            setMetrics({
+              available: s.assets.byStatus?.Available || 0,
+              allocated: s.allocations.activeCount || 0,
+              maintenance: s.maintenance.activeCount || 0,
+              bookings: (s.bookings.metrics?.Upcoming || 0) + (s.bookings.metrics?.Ongoing || 0)
+            });
+
+            // Compute category share for Recharts
+            const totalAssets = s.assets.totalCount || 1;
+            const share = s.assets.byCategory.map((cat, idx) => {
+              const colors = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#7b1fa2'];
+              return {
+                name: cat.categoryName,
+                value: Math.round((cat.count / totalAssets) * 100),
+                color: colors[idx % colors.length]
+              };
+            });
+            setCategoriesShare(share);
+          }
+
+          if (logData && logData.logs) {
+            const list = logData.logs.slice(0, 5).map(log => {
+              const name = log.actorEmployeeId?.name || 'System';
+              return {
+                id: log._id,
+                user: name,
+                action: `${log.action.replace('asset.', 'asset ').replace('transfer.', 'transfer ')}: ${log.metadata?.detail || ''}`,
+                time: new Date(log.createdAt).toLocaleDateString(),
+                initials: name.split(' ').map(n => n[0]).join('').slice(0, 2),
+                color: '#1976d2'
+              };
+            });
+            setActivities(list);
+          }
+
+          if (transferData && transferData.transfers) {
+            const pending = transferData.transfers
+              .filter(t => t.status === 'Requested')
+              .slice(0, 5)
+              .map(t => ({
+                id: t._id,
+                asset: t.assetId?.name || 'Unknown Asset',
+                user: t.targetEmployeeId?.name || 'Unknown User',
+                type: 'Transfer',
+                status: t.status
+              }));
+            setPendingTransfers(pending);
+          }
+
+          if (allocData && allocData.allocations) {
+            const returns = allocData.allocations
+              .filter(a => a.status === 'Active')
+              .slice(0, 5)
+              .map(a => ({
+                id: a.assetId?.assetTag || 'AF-XXXX',
+                asset: a.assetId?.name || 'Unknown Asset',
+                holder: a.employeeId?.name || 'Department',
+                dueDate: a.expectedReturnDate ? new Date(a.expectedReturnDate).toLocaleDateString() : 'No limit',
+                overdue: a.isOverdue || false
+              }));
+            setUpcomingReturns(returns);
+          }
+        } else {
+          // Employee Dashboard fallback (since real API might not exist yet)
           setMetrics({
-            available: s.assets.byStatus?.Available || 0,
-            allocated: s.allocations.activeCount || 0,
-            maintenance: s.maintenance.activeCount || 0,
-            bookings: (s.bookings.metrics?.Upcoming || 0) + (s.bookings.metrics?.Ongoing || 0)
+            available: 0,
+            allocated: 0,
+            maintenance: 0,
+            bookings: 0
           });
-
-          // Compute category share for Recharts
-          const totalAssets = s.assets.totalCount || 1;
-          const share = s.assets.byCategory.map((cat, idx) => {
-            const colors = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#7b1fa2'];
-            return {
-              name: cat.categoryName,
-              value: Math.round((cat.count / totalAssets) * 100),
-              color: colors[idx % colors.length]
-            };
-          });
-          setCategoriesShare(share);
-        }
-
-        if (logData && logData.logs) {
-          const list = logData.logs.slice(0, 5).map(log => {
-            const name = log.actorEmployeeId?.name || 'System';
-            return {
-              id: log._id,
-              user: name,
-              action: `${log.action.replace('asset.', 'asset ').replace('transfer.', 'transfer ')}: ${log.metadata?.detail || ''}`,
-              time: new Date(log.createdAt).toLocaleDateString(),
-              initials: name.split(' ').map(n => n[0]).join('').slice(0, 2),
-              color: '#1976d2'
-            };
-          });
-          setActivities(list);
-        }
-
-        if (transferData && transferData.transfers) {
-          const pending = transferData.transfers
-            .filter(t => t.status === 'Requested')
-            .slice(0, 5)
-            .map(t => ({
-              id: t._id,
-              asset: t.assetId?.name || 'Unknown Asset',
-              user: t.targetEmployeeId?.name || 'Unknown User',
-              type: 'Transfer',
-              status: t.status
-            }));
-          setPendingTransfers(pending);
-        }
-
-        if (allocData && allocData.allocations) {
-          const list = allocData.allocations
-            .filter(a => a.status === 'Active')
-            .slice(0, 5)
-            .map(a => ({
-              id: a.assetId?.assetTag || 'AF-XXXX',
-              asset: a.assetId?.name || 'Unknown Asset',
-              holder: a.employeeId?.name || 'Department',
-              dueDate: a.expectedReturnDate ? new Date(a.expectedReturnDate).toLocaleDateString() : 'No limit',
-              overdue: a.isOverdue || false
-            }));
-          setUpcomingReturns(list);
         }
 
       } catch (err) {
@@ -212,7 +225,7 @@ export default function Dashboard() {
       {/* KPI Cards Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {kpis.map((kpi, index) => (
-          <Grid item xs={12} sm={6} lg={3} key={index}>
+          <Grid xs={12} sm={6} lg={3} key={index}>
             <Card sx={{ height: '100%' }}>
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>

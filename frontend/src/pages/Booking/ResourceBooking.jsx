@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Card, Typography, Grid, Paper, Select, MenuItem, 
-  FormControl, InputLabel, TextField, Button, Alert, List, ListItem, ListItemText, Divider, CircularProgress 
+  FormControl, InputLabel, TextField, Button, Alert, List, ListItem, ListItemText, Divider, CircularProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Chip
 } from '@mui/material';
+import { Edit as EditIcon, Cancel as CancelIcon } from '@mui/icons-material';
+import { useAuth } from '../../components/layout/AuthContext';
+import { usePermission } from '../../hooks/usePermission';
 import assetService from '../../services/assetService';
 import bookingService from '../../services/bookingService';
 
 export default function ResourceBooking() {
+  const { user } = useAuth();
+  const { isManager, isAdmin } = usePermission();
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [bookableAssets, setBookableAssets] = useState([]);
@@ -18,6 +25,12 @@ export default function ResourceBooking() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [purpose, setPurpose] = useState('');
+
+  // Reschedule state
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [newStartTime, setNewStartTime] = useState('');
+  const [newEndTime, setNewEndTime] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -85,8 +98,55 @@ export default function ResourceBooking() {
       setPurpose('');
       fetchBookings();
     } catch (err) {
-      const msg = err.response?.data?.error?.message || err.message || 'Double booking / overlap detected.';
-      setErrorMsg(msg);
+      if (err.response?.status === 409) {
+        setErrorMsg('Conflict: The requested time slot overlaps with an existing booking.');
+      } else {
+        setErrorMsg(err.response?.data?.error?.message || err.message || 'Failed to create booking.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
+    try {
+      await bookingService.cancel(bookingId);
+      setSuccessMsg('Booking cancelled successfully.');
+      fetchBookings();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.error?.message || 'Failed to cancel booking.');
+    }
+  };
+
+  const openRescheduleModal = (booking) => {
+    setSelectedBooking(booking);
+    setNewStartTime(new Date(booking.startTime).toISOString().slice(0, 16));
+    setNewEndTime(new Date(booking.endTime).toISOString().slice(0, 16));
+    setRescheduleOpen(true);
+  };
+
+  const handleReschedule = async () => {
+    if (!newStartTime || !newEndTime) {
+      setErrorMsg('Start and end times are required for rescheduling.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      setErrorMsg('');
+      await bookingService.update(selectedBooking._id, {
+        startTime: new Date(newStartTime),
+        endTime: new Date(newEndTime)
+      });
+      setSuccessMsg('Booking rescheduled successfully.');
+      setRescheduleOpen(false);
+      fetchBookings();
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setErrorMsg('Conflict: The rescheduled time slot overlaps with an existing booking.');
+      } else {
+        setErrorMsg(err.response?.data?.error?.message || 'Failed to reschedule booking.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -191,15 +251,41 @@ export default function ResourceBooking() {
                   const startStr = new Date(booking.startTime).toLocaleString();
                   const endStr = new Date(booking.endTime).toLocaleString();
                   const userName = booking.bookedByEmployee?.name || 'AssetFlow Actor';
+                  
+                  const isOwner = booking.bookedBy?._id === user?._id || booking.bookedBy === user?._id;
+                  const canModify = (isOwner || isManager || isAdmin) && booking.status !== 'Cancelled';
+
                   return (
-                    <Paper key={booking._id} sx={{ p: 2, mb: 2, bgcolor: '#f8fafc', borderLeft: '4px solid #1976d2', borderRadius: '4px' }}>
-                      <Typography variant="subtitle2" fontWeight="600">{booking.purpose || 'Reserved Slot'}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                        Scheduled: {startStr} - {endStr}
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: 'block', mt: 0.2, fontWeight: 500 }}>
-                        Reserved by: {userName} (Status: {booking.status})
-                      </Typography>
+                    <Paper key={booking._id} sx={{ p: 2, mb: 2, bgcolor: booking.status === 'Cancelled' ? '#f5f5f5' : '#f8fafc', borderLeft: booking.status === 'Cancelled' ? '4px solid #9e9e9e' : '4px solid #1976d2', borderRadius: '4px' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight="600" sx={{ textDecoration: booking.status === 'Cancelled' ? 'line-through' : 'none' }}>
+                            {booking.purpose || 'Reserved Slot'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Scheduled: {startStr} - {endStr}
+                          </Typography>
+                          <Typography variant="caption" sx={{ display: 'block', mt: 0.2, fontWeight: 500 }}>
+                            Reserved by: {userName}
+                          </Typography>
+                          <Chip 
+                            label={booking.status} 
+                            size="small" 
+                            color={booking.status === 'Upcoming' || booking.status === 'Ongoing' ? 'primary' : 'default'} 
+                            sx={{ mt: 1, height: 20, fontSize: '0.7rem' }} 
+                          />
+                        </Box>
+                        {canModify && (
+                          <Box>
+                            <IconButton size="small" onClick={() => openRescheduleModal(booking)} color="primary" title="Reschedule">
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => handleCancelBooking(booking._id)} color="error" title="Cancel">
+                              <CancelIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        )}
+                      </Box>
                     </Paper>
                   );
                 })
@@ -208,6 +294,36 @@ export default function ResourceBooking() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Reschedule Modal */}
+      <Dialog open={rescheduleOpen} onClose={() => setRescheduleOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Reschedule Booking</DialogTitle>
+        <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {errorMsg && rescheduleOpen && <Alert severity="error">{errorMsg}</Alert>}
+          <TextField
+            label="New Start Date Time"
+            type="datetime-local"
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            value={newStartTime}
+            onChange={(e) => setNewStartTime(e.target.value)}
+          />
+          <TextField
+            label="New End Date Time"
+            type="datetime-local"
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            value={newEndTime}
+            onChange={(e) => setNewEndTime(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setRescheduleOpen(false)}>Cancel</Button>
+          <Button onClick={handleReschedule} variant="contained" disabled={submitting}>
+            {submitting ? 'Updating...' : 'Reschedule'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

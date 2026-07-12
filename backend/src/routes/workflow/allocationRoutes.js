@@ -15,8 +15,8 @@ router.use(authenticate);
 // List allocations (all users, restricted by role internally)
 router.get('/', listAllocations);
 
-// Admin & Asset Manager only
-router.post('/', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), allocateAsset);
-router.patch('/:id/return', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER), returnAsset);
+// Asset Manager only
+router.post('/', requireRole(ROLES.ASSET_MANAGER), allocateAsset);
+router.patch('/:id/return', requireRole(ROLES.ASSET_MANAGER), returnAsset);
 
 export default router;

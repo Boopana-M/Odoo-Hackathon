@@ -10,19 +10,19 @@ import { ROLES } from '../../models/index.js';
 
 const router = express.Router();
 
-// All user-management routes require authentication + Admin role
-router.use(authenticate, requireRole(ROLES.ADMIN));
+// Base authentication for all routes
+router.use(authenticate);
 
 // GET /api/users          — list all users (with employee profiles)
-router.get('/', listUsers);
+router.get('/', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER, ROLES.DEPARTMENT_HEAD), listUsers);
 
 // GET /api/users/:id      — get a single user + employee profile
-router.get('/:id', getUserById);
+router.get('/:id', requireRole(ROLES.ADMIN, ROLES.ASSET_MANAGER, ROLES.DEPARTMENT_HEAD), getUserById);
 
 // PATCH /api/users/:id/role   — promote or demote a user
-router.patch('/:id/role', updateUserRole);
+router.patch('/:id/role', requireRole(ROLES.ADMIN), updateUserRole);
 
 // PATCH /api/users/:id/status — activate or deactivate a user
-router.patch('/:id/status', updateUserStatus);
+router.patch('/:id/status', requireRole(ROLES.ADMIN), updateUserStatus);
 
 export default router;

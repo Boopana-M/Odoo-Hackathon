@@ -45,7 +45,7 @@ export const createBooking = async (req, res) => {
     });
 
     if (overlappingBooking) {
-      return res.status(400).json({ error: { message: 'Booking overlaps with an existing booking for this resource.' } });
+      return res.status(409).json({ error: { message: 'Booking overlaps with an existing booking for this resource.' } });
     }
 
     // Find employee profile to link departmentId and employeeId if available
@@ -202,5 +202,83 @@ export const cancelBooking = async (req, res) => {
       return res.status(400).json({ error: { message: 'Invalid ID format.' } });
     }
     return res.status(500).json({ error: { message: 'Failed to cancel booking.' } });
+  }
+};
+
+// ── Update/Reschedule Booking ───────────────────────────────────────────────
+/**
+ * PATCH /api/bookings/:id
+ * Auth user. (Creator of booking or Admin/Asset Manager)
+ */
+export const updateBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startTime, endTime, purpose } = req.body;
+
+    const booking = await ResourceBooking.findById(id);
+    if (!booking) {
+      return res.status(404).json({ error: { message: 'Booking not found.' } });
+    }
+
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      return res.status(400).json({ error: { message: 'Cannot reschedule a cancelled booking.' } });
+    }
+
+    const isOwner = booking.bookedBy.toString() === req.user._id.toString();
+    const isPrivileged = req.user.role === ROLES.ADMIN || req.user.role === ROLES.ASSET_MANAGER;
+
+    if (!isOwner && !isPrivileged) {
+      return res.status(403).json({ error: { message: 'You are not authorized to reschedule this booking.' } });
+    }
+
+    if (startTime || endTime) {
+      const newStart = startTime ? new Date(startTime) : booking.startTime;
+      const newEnd = endTime ? new Date(endTime) : booking.endTime;
+
+      if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+        return res.status(400).json({ error: { message: 'Invalid date format.' } });
+      }
+
+      if (newEnd <= newStart) {
+        return res.status(400).json({ error: { message: 'Booking end time must be after the start time.' } });
+      }
+
+      // Check overlaps excluding the current booking
+      const overlappingBooking = await ResourceBooking.findOne({
+        _id: { $ne: booking._id },
+        assetId: booking.assetId,
+        status: { $ne: BOOKING_STATUS.CANCELLED },
+        startTime: { $lt: newEnd },
+        endTime: { $gt: newStart }
+      });
+
+      if (overlappingBooking) {
+        return res.status(409).json({ error: { message: 'Rescheduled time overlaps with an existing booking.' } });
+      }
+
+      booking.startTime = newStart;
+      booking.endTime = newEnd;
+    }
+
+    if (purpose !== undefined) {
+      booking.purpose = String(purpose).trim();
+    }
+
+    await booking.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'booking.rescheduled',
+      entityType: 'ResourceBooking',
+      entityId: booking._id,
+      metadata: { newStartTime: booking.startTime, newEndTime: booking.endTime }
+    });
+
+    return res.status(200).json({ message: 'Booking updated successfully.', booking });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to update booking.' } });
   }
 };

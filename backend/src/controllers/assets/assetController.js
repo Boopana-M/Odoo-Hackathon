@@ -1,4 +1,5 @@
-import { Asset, AssetCategory, ASSET_LIFECYCLE, ROLES } from '../../models/index.js';
+import mongoose from 'mongoose';
+import { Asset, AssetCategory, ASSET_LIFECYCLE, ROLES, Allocation, ALLOCATION_STATUS, Employee } from '../../models/index.js';
 
 // Helper to validate custom fields against category definition
 const validateCustomFields = (customFields, fieldDefinitions) => {
@@ -148,21 +149,29 @@ export const createAsset = async (req, res) => {
  */
 export const listAssets = async (req, res) => {
   try {
-    const { lifecycleStatus, categoryId, search, isSharedBookable } = req.query;
+    const { lifecycleStatus, categoryId, search, isSharedBookable, myAssets } = req.query;
     const filter = {};
 
     if (lifecycleStatus) filter.lifecycleStatus = lifecycleStatus;
     if (categoryId) filter.categoryId = categoryId;
     if (isSharedBookable !== undefined) filter.isSharedBookable = isSharedBookable === 'true';
 
-    // Role-based visibility logic could go here
-    // e.g., regular employees might only see Available shared assets, while Asset Managers see all
-
-    if (req.user.role === ROLES.EMPLOYEE) {
+    // If myAssets is requested, filter assets allocated to the current user
+    if (myAssets === 'true') {
+      const emp = await Employee.findOne({ userId: req.user._id });
+      if (emp) {
+        const allocations = await Allocation.find({ 
+          employeeId: emp._id, 
+          status: ALLOCATION_STATUS.ACTIVE 
+        });
+        const assetIds = allocations.map(a => a.assetId);
+        filter._id = { $in: assetIds };
+      } else {
+        return res.status(200).json({ assets: [], total: 0 });
+      }
+    } else if (req.user.role === ROLES.EMPLOYEE) {
       // Employees generally only see what's shared bookable or what's explicitly assigned to them
-      // (Allocation handles assigned, here we filter for bookable)
       filter.lifecycleStatus = { $in: [ASSET_LIFECYCLE.AVAILABLE, ASSET_LIFECYCLE.ALLOCATED] };
-      // Depending on rules, you might enforce isSharedBookable for Employees
     }
 
     let assets = await Asset.find(filter).populate('categoryId', 'name').sort({ createdAt: -1 });
