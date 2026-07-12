@@ -38,7 +38,7 @@ const assetSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true, // Enables multiple null/omitted serial numbers, but unique when present
-      default: null,
+      default: undefined,
       trim: true
     },
     acquisitionDate: {
