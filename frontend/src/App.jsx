@@ -8,16 +8,14 @@ import Login from './pages/Login/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
 import OrganizationSetup from './pages/Organization/OrganizationSetup';
 
-// Import Developer 2 (FE-2) routing stubs
-import {
-  AssetDirectory,
-  AllocateAsset,
-  ResourceBooking,
-  MaintenanceKanban,
-  AuditCycles,
-  AnalyticsDashboard,
-  NotificationCenter,
-} from './components/layout/FE2Placeholders';
+import AssetDirectory from './pages/Assets/AssetDirectory';
+import AllocateAsset from './pages/Allocation/AllocateAsset';
+import ResourceBooking from './pages/Booking/ResourceBooking';
+
+import MaintenanceKanban from './pages/Maintenance/MaintenanceKanban';
+import AuditCycles from './pages/Audit/AuditCycles';
+import AnalyticsDashboard from './pages/Reports/AnalyticsDashboard';
+import NotificationCenter from './pages/Notifications/NotificationCenter';
 
 export default function App() {
   return (
