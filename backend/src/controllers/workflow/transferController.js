@@ -1,5 +1,7 @@
 import { Asset, Allocation, TransferRequest, ALLOCATION_STATUS, TRANSFER_STATUS, ASSET_LIFECYCLE, ROLES } from '../../models/index.js';
 import mongoose from 'mongoose';
+import { logActivity } from '../../utils/logger.js';
+import { createNotification } from '../../utils/notifier.js';
 
 // ── Create Transfer Request ──────────────────────────────────────────────────
 /**
@@ -64,6 +66,15 @@ export const createTransfer = async (req, res) => {
     });
 
     await transfer.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'transfer.requested',
+      entityType: 'TransferRequest',
+      entityId: transfer._id,
+      metadata: { assetId, destinationEmployeeId, destinationDepartmentId }
+    });
+
     return res.status(201).json({ message: 'Transfer request submitted.', transfer });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -134,6 +145,23 @@ export const approveTransfer = async (req, res) => {
       $set: { lifecycleStatus: ASSET_LIFECYCLE.ALLOCATED }
     });
 
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'transfer.approved',
+      entityType: 'TransferRequest',
+      entityId: transfer._id,
+      metadata: { assetId: transfer.assetId, newAllocationId: newAllocation._id }
+    });
+
+    await createNotification({
+      recipientUserId: transfer.requestedBy,
+      type: 'Transfer Approved',
+      title: 'Transfer Request Approved',
+      message: `Your transfer request for asset has been approved.`,
+      relatedEntityType: 'TransferRequest',
+      relatedEntityId: transfer._id
+    });
+
     return res.status(200).json({ message: 'Transfer approved and re-allocated.', transfer, allocation: newAllocation });
   } catch (error) {
     if (error.name === 'CastError') {
@@ -170,12 +198,72 @@ export const rejectTransfer = async (req, res) => {
       return res.status(400).json({ error: { message: 'Transfer request not found or not in Requested status.' } });
     }
 
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'transfer.rejected',
+      entityType: 'TransferRequest',
+      entityId: transfer._id
+    });
+
+    await createNotification({
+      recipientUserId: transfer.requestedBy,
+      type: 'Transfer Rejected',
+      title: 'Transfer Request Rejected',
+      message: `Your transfer request for asset has been rejected.`,
+      relatedEntityType: 'TransferRequest',
+      relatedEntityId: transfer._id
+    });
+
     return res.status(200).json({ message: 'Transfer rejected.', transfer });
   } catch (error) {
     if (error.name === 'CastError') {
       return res.status(400).json({ error: { message: 'Invalid ID format.' } });
     }
     return res.status(500).json({ error: { message: 'Failed to reject transfer.' } });
+  }
+};
+
+// ── Cancel Transfer Request ──────────────────────────────────────────────────
+/**
+ * PATCH /api/transfers/:id/cancel
+ * Auth only. Requester or Admin/Asset Manager can cancel a Requested transfer.
+ */
+export const cancelTransfer = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transfer = await TransferRequest.findById(id);
+    if (!transfer) {
+      return res.status(404).json({ error: { message: 'Transfer request not found.' } });
+    }
+
+    if (transfer.status !== TRANSFER_STATUS.REQUESTED) {
+      return res.status(400).json({ error: { message: 'Only pending (Requested) transfer requests can be cancelled.' } });
+    }
+
+    const isRequester = transfer.requestedBy.toString() === req.user._id.toString();
+    const isPrivileged = req.user.role === ROLES.ADMIN || req.user.role === ROLES.ASSET_MANAGER;
+
+    if (!isRequester && !isPrivileged) {
+      return res.status(403).json({ error: { message: 'You are not authorized to cancel this transfer request.' } });
+    }
+
+    transfer.status = TRANSFER_STATUS.CANCELLED;
+    await transfer.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'transfer.cancelled',
+      entityType: 'TransferRequest',
+      entityId: transfer._id
+    });
+
+    return res.status(200).json({ message: 'Transfer request cancelled.', transfer });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to cancel transfer request.' } });
   }
 };
 

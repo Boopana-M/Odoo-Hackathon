@@ -210,4 +210,52 @@ describe('Phase 8 — Asset Transfer Workflow', () => {
       assert.strictEqual(oldAlloc.status, ALLOCATION_STATUS.ACTIVE);
     });
   });
+
+  describe('PATCH /api/transfers/:id/cancel', () => {
+    let transferId;
+    let empUserId;
+    before(async () => {
+      const u = await User.findOne({ email: 'emp@test.com' });
+      empUserId = u._id;
+    });
+
+    beforeEach(async () => {
+      const transfer = await TransferRequest.create({
+        assetId,
+        currentAllocationId,
+        requestedBy: empUserId,
+        destinationEmployeeId: emp2Id,
+        status: TRANSFER_STATUS.REQUESTED
+      });
+      transferId = transfer._id;
+    });
+
+    test('should allow the requesting employee to cancel their transfer request', async () => {
+      const res = await fetch(`${baseUrl}/transfers/${transferId}/cancel`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${empToken}` }
+      });
+      const body = await res.json();
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(body.transfer.status, TRANSFER_STATUS.CANCELLED);
+    });
+
+    test('should block another employee from cancelling the transfer request', async () => {
+      const res = await fetch(`${baseUrl}/transfers/${transferId}/cancel`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${emp2Token}` }
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    test('should allow Asset Manager to cancel the transfer request', async () => {
+      const res = await fetch(`${baseUrl}/transfers/${transferId}/cancel`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${managerToken}` }
+      });
+      const body = await res.json();
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(body.transfer.status, TRANSFER_STATUS.CANCELLED);
+    });
+  });
 });

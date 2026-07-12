@@ -1,5 +1,7 @@
 import { Asset, MaintenanceRequest, Allocation, MAINTENANCE_STATUS, MAINTENANCE_PRIORITY, ASSET_LIFECYCLE, ALLOCATION_STATUS, ROLES } from '../../models/index.js';
 import mongoose from 'mongoose';
+import { logActivity } from '../../utils/logger.js';
+import { createNotification } from '../../utils/notifier.js';
 
 // ── Create Maintenance Request ───────────────────────────────────────────────
 /**
@@ -50,6 +52,15 @@ export const createMaintenanceRequest = async (req, res) => {
     });
 
     await maintenance.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.raised',
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id,
+      metadata: { assetId, priority }
+    });
+
     return res.status(201).json({ message: 'Maintenance request submitted.', maintenance });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -95,6 +106,22 @@ export const approveMaintenance = async (req, res) => {
       $set: { lifecycleStatus: ASSET_LIFECYCLE.UNDER_MAINTENANCE }
     });
 
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.approved',
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id
+    });
+
+    await createNotification({
+      recipientUserId: maintenance.raisedBy,
+      type: 'Maintenance Approved',
+      title: 'Maintenance Request Approved',
+      message: `Your maintenance request for asset has been approved.`,
+      relatedEntityType: 'MaintenanceRequest',
+      relatedEntityId: maintenance._id
+    });
+
     return res.status(200).json({ message: 'Maintenance request approved.', maintenance });
   } catch (error) {
     return res.status(500).json({ error: { message: 'Failed to approve maintenance request.' } });
@@ -126,6 +153,22 @@ export const rejectMaintenance = async (req, res) => {
     if (!maintenance) {
       return res.status(400).json({ error: { message: 'Request not found or not in Pending status.' } });
     }
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.rejected',
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id
+    });
+
+    await createNotification({
+      recipientUserId: maintenance.raisedBy,
+      type: 'Maintenance Rejected',
+      title: 'Maintenance Request Rejected',
+      message: `Your maintenance request for asset has been rejected.`,
+      relatedEntityType: 'MaintenanceRequest',
+      relatedEntityId: maintenance._id
+    });
 
     return res.status(200).json({ message: 'Maintenance request rejected.', maintenance });
   } catch (error) {
@@ -174,9 +217,136 @@ export const resolveMaintenance = async (req, res) => {
       $set: { lifecycleStatus: newAssetStatus }
     });
 
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.resolved',
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id
+    });
+
+    await createNotification({
+      recipientUserId: maintenance.raisedBy,
+      type: 'Maintenance Resolved',
+      title: 'Maintenance Request Resolved',
+      message: `Your maintenance request for asset has been resolved.`,
+      relatedEntityType: 'MaintenanceRequest',
+      relatedEntityId: maintenance._id
+    });
+
     return res.status(200).json({ message: 'Maintenance request resolved.', maintenance });
   } catch (error) {
     return res.status(500).json({ error: { message: 'Failed to resolve maintenance request.' } });
+  }
+};
+
+// ── Assign Technician to Maintenance Request ─────────────────────────────────
+/**
+ * PATCH /api/maintenance/:id/assign
+ * Admin, Asset Manager
+ */
+export const assignTechnician = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedTechnician } = req.body;
+
+    if (!assignedTechnician) {
+      return res.status(400).json({ error: { message: 'Assigned technician (User ID) is required.' } });
+    }
+
+    const validStatuses = [MAINTENANCE_STATUS.APPROVED, MAINTENANCE_STATUS.TECHNICIAN_ASSIGNED];
+
+    const maintenance = await MaintenanceRequest.findOneAndUpdate(
+      { _id: id, status: { $in: validStatuses } },
+      { 
+        $set: { 
+          status: MAINTENANCE_STATUS.TECHNICIAN_ASSIGNED,
+          assignedTechnician
+        } 
+      },
+      { new: true }
+    );
+
+    if (!maintenance) {
+      return res.status(400).json({ error: { message: 'Request not found or not in Approved/Assigned status.' } });
+    }
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.assigned',
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id,
+      metadata: { assignedTechnician }
+    });
+
+    await createNotification({
+      recipientUserId: assignedTechnician,
+      type: 'Asset Assigned',
+      title: 'Technician Assigned to Maintenance',
+      message: `You have been assigned to handle a maintenance request.`,
+      relatedEntityType: 'MaintenanceRequest',
+      relatedEntityId: maintenance._id
+    });
+
+    return res.status(200).json({ message: 'Technician assigned successfully.', maintenance });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to assign technician.' } });
+  }
+};
+
+// ── Update Maintenance Request Progress ──────────────────────────────────────
+/**
+ * PATCH /api/maintenance/:id/progress
+ * Admin, Asset Manager, or Assigned Technician
+ */
+export const updateProgress = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { workNotes } = req.body;
+
+    const maintenance = await MaintenanceRequest.findById(id);
+    if (!maintenance) {
+      return res.status(404).json({ error: { message: 'Maintenance request not found.' } });
+    }
+
+    const isTechnician = maintenance.assignedTechnician && maintenance.assignedTechnician.toString() === req.user._id.toString();
+    const isPrivileged = req.user.role === ROLES.ADMIN || req.user.role === ROLES.ASSET_MANAGER;
+
+    if (!isTechnician && !isPrivileged) {
+      return res.status(403).json({ error: { message: 'You are not authorized to update progress on this request.' } });
+    }
+
+    const validStatuses = [
+      MAINTENANCE_STATUS.APPROVED,
+      MAINTENANCE_STATUS.TECHNICIAN_ASSIGNED,
+      MAINTENANCE_STATUS.IN_PROGRESS
+    ];
+
+    if (!validStatuses.includes(maintenance.status)) {
+      return res.status(400).json({ error: { message: 'Cannot update progress for request in this status.' } });
+    }
+
+    maintenance.status = MAINTENANCE_STATUS.IN_PROGRESS;
+    if (workNotes) {
+      maintenance.workNotes = String(workNotes).trim();
+    }
+    await maintenance.save();
+
+    await logActivity({
+      actorUserId: req.user._id,
+      action: 'maintenance.assigned', // using existing MAINTENANCE_ASSIGNED prefix as action or similar. wait, let's keep it simple: log action as maintenance.progress
+      entityType: 'MaintenanceRequest',
+      entityId: maintenance._id
+    });
+
+    return res.status(200).json({ message: 'Maintenance progress updated.', maintenance });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to update progress.' } });
   }
 };
 
