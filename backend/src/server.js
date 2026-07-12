@@ -12,6 +12,7 @@ import './models/index.js';
 
 // ── Route imports (add new route files here as phases are completed) ──────────
 import authRoutes from './routes/auth/authRoutes.js';
+import userRoutes from './routes/users/userRoutes.js';
 
 // Resolve directory paths
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Route registration ────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
