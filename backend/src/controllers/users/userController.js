@@ -1,4 +1,4 @@
-import { User, Employee, ROLES } from '../../models/index.js';
+import { User, Employee, Department, ROLES } from '../../models/index.js';
 
 // Roles that an Admin is allowed to promote an Employee TO.
 // Admin cannot be self-assigned via this endpoint.
@@ -200,5 +200,49 @@ export const updateUserStatus = async (req, res) => {
       return res.status(400).json({ error: { message: 'Invalid user ID format.' } });
     }
     return res.status(500).json({ error: { message: 'Failed to update user status.' } });
+  }
+};
+
+// ── Change user department ───────────────────────────────────────────────────
+/**
+ * PATCH /api/users/:id/department
+ * Admin only.
+ * Body: { departmentId: string | null }
+ */
+export const updateUserDepartment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { departmentId } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: { message: 'User not found.' } });
+    }
+
+    const employee = await Employee.findOne({ userId: user._id });
+    if (!employee) {
+      return res.status(404).json({ error: { message: 'Employee profile not found for this user.' } });
+    }
+
+    // If departmentId is provided, verify it is a valid active Department
+    if (departmentId) {
+      const department = await Department.findById(departmentId);
+      if (!department) {
+        return res.status(404).json({ error: { message: 'Department not found.' } });
+      }
+    }
+
+    employee.departmentId = departmentId || null;
+    await employee.save();
+
+    return res.status(200).json({
+      message: 'Employee department updated successfully.',
+      employee
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: { message: 'Invalid ID format.' } });
+    }
+    return res.status(500).json({ error: { message: 'Failed to update user department.' } });
   }
 };

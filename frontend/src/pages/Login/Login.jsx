@@ -50,6 +50,17 @@ export default function Login() {
     setSuccessMsg('');
   };
 
+  const handleQuickLogin = (email, password) => {
+    setFormData((prev) => ({
+      ...prev,
+      email,
+      password,
+    }));
+    setErrors({});
+    setErrorMsg('');
+    setSuccessMsg('');
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -508,15 +519,65 @@ export default function Login() {
                 mt: 4,
                 p: 2,
                 borderRadius: 2,
-                bgcolor: '#fff8e1',
-                border: '1px solid #ffe082',
-                textAlign: 'center',
+                bgcolor: '#f8f9fa',
+                border: '1px solid #e9ecef',
               }}
             >
-              <Typography variant="caption" sx={{ color: '#b78103', fontWeight: 600 }}>
-                💡 Admin Credentials Sandbox Hint:<br />
-                Email: <strong>admin@assetflow.com</strong> / Pass: <strong>admin123</strong>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  color: '#495057',
+                  fontWeight: 600,
+                  mb: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 0.5,
+                }}
+              >
+                💡 Quick Demo Login (Click to Auto-fill)
               </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                {[
+                  { role: 'Admin', email: 'admin@assetflow.com', pass: 'admin123', color: '#1976d2' },
+                  { role: 'Asset Manager', email: 'manager@assetflow.com', pass: 'manager123', color: '#2e7d32' },
+                  { role: 'Dept Head', email: 'head@assetflow.com', pass: 'head123', color: '#ed6c02' },
+                  { role: 'Employee', email: 'employee@assetflow.com', pass: 'employee123', color: '#9c27b0' },
+                ].map((cred) => (
+                  <Button
+                    key={cred.role}
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleQuickLogin(cred.email, cred.pass)}
+                    sx={{
+                      textTransform: 'none',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      p: 1,
+                      border: '1px solid #dee2e6',
+                      borderRadius: 1.5,
+                      bgcolor: '#ffffff',
+                      color: '#495057',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        bgcolor: '#f1f3f5',
+                        borderColor: cred.color,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                        transform: 'translateY(-1px)',
+                        color: cred.color,
+                      },
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: cred.color }}>
+                      {cred.role}
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#6c757d' }}>
+                      {cred.email}
+                    </Typography>
+                  </Button>
+                ))}
+              </Box>
             </Box>
           )}
         </Paper>
