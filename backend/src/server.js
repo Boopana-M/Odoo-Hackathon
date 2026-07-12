@@ -16,6 +16,7 @@ import userRoutes from './routes/users/userRoutes.js';
 import departmentRoutes from './routes/organization/departmentRoutes.js';
 import assetCategoryRoutes from './routes/organization/assetCategoryRoutes.js';
 import assetRoutes from './routes/assets/assetRoutes.js';
+import allocationRoutes from './routes/workflow/allocationRoutes.js';
 
 // Resolve directory paths
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +39,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/asset-categories', assetCategoryRoutes);
 app.use('/api/assets', assetRoutes);
+app.use('/api/allocations', allocationRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
