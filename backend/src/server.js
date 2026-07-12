@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB, mongoose } from './config/db.js';
+import authRoutes from './routes/auth/authRoutes.js';
 
 // Resolve directory paths
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +22,9 @@ app.use(cors());
 // Parse request bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Register routes
+app.use('/api/auth', authRoutes);
 
 // Basic Health Check Route
 app.get('/api/health', (req, res) => {

@@ -1,5 +1,5 @@
 // Set test environment database to local SQLite-like MongoDB test collection
-process.env.MONGODB_URI = 'mongodb://localhost:27017/assetflow_test';
+process.env.MONGODB_URI = 'mongodb://localhost:27017/assetflow_models_test';
 
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
@@ -20,6 +20,18 @@ describe('AssetFlow Mongoose Models (BE-1 Phase 1)', () => {
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(process.env.MONGODB_URI);
     }
+    
+    // Drop database to ensure a clean state for index compilation
+    await mongoose.connection.db.dropDatabase();
+
+    // Ensure all model indexes are built before starting tests
+    await Promise.all([
+      User.init(),
+      Employee.init(),
+      Department.init(),
+      AssetCategory.init(),
+      Asset.init()
+    ]);
   });
 
   after(async () => {
